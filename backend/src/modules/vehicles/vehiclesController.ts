@@ -276,15 +276,24 @@ export function getVehicleTimeline(req: Request, res: Response) {
   `).all(id) as any[];
 
   for (const inv of invoices) {
+    const total = Math.round((Number(inv.grand_total) || 0) * 100) / 100;
+    const paid = Math.round((Number(inv.paid_amount) || 0) * 100) / 100;
+    const balance = Math.round((Number(inv.balance_due) || 0) * 100) / 100;
+
     timelineEvents.push({
       id: `inv_${inv.id}`,
       type: 'invoice',
       timestamp: inv.issue_date,
       title: `فاتورة صيانة رقم [${inv.invoice_number}]`,
-      description: `الإجمالي: ${inv.grand_total} ج.م | المدفوع: ${inv.paid_amount} ج.م | المتبقي: ${inv.balance_due} ج.م`,
+      description: `الإجمالي: ${total} ج.م | المدفوع: ${paid} ج.م | المتبقي: ${balance} ج.م`,
       authorName: inv.author_name,
       status: inv.status,
-      details: inv
+      details: {
+        ...inv,
+        grand_total: total,
+        paid_amount: paid,
+        balance_due: balance
+      }
     });
   }
 

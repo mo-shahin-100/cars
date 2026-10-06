@@ -596,15 +596,17 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({ initialInvoiceId, in
                 </div>
                 <div className="flex justify-between text-sm font-black text-white border-t border-slate-800 pt-2">
                   <span>الإجمالي المستحق:</span>
-                  <span className="font-mono text-sky-400">{selectedInvoice.grand_total} ج.م</span>
+                  <span className="font-mono text-sky-400 font-bold">{Number(selectedInvoice.grand_total || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ج.م</span>
                 </div>
                 <div className="flex justify-between text-xs text-emerald-400">
                   <span>المبلغ المدفوع:</span>
-                  <span className="font-mono font-bold">{selectedInvoice.paid_amount} ج.م</span>
+                  <span className="font-mono font-bold">{Number(selectedInvoice.paid_amount || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ج.م</span>
                 </div>
-                <div className="flex justify-between text-xs font-bold text-amber-400 border-t border-slate-800 pt-1">
-                  <span>الرصيد المتبقي:</span>
-                  <span className="font-mono">{selectedInvoice.balance_due} ج.م</span>
+                <div className="flex justify-between text-xs font-bold border-t border-slate-800 pt-1">
+                  <span className={Number(selectedInvoice.balance_due) > 0 ? 'text-rose-300' : 'text-slate-400'}>الرصيد المتبقي:</span>
+                  <span className={`font-mono font-bold ${Number(selectedInvoice.balance_due) > 0 ? 'text-rose-400' : 'text-slate-400'}`}>
+                    {Number(selectedInvoice.balance_due || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ج.م
+                  </span>
                 </div>
               </div>
 
@@ -664,7 +666,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({ initialInvoiceId, in
             <form onSubmit={handleRegisterPayment} className="p-5 space-y-4">
               <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl text-xs">
                 <p className="font-bold text-sky-400">{selectedInvoice.invoice_number}</p>
-                <p className="text-slate-400 mt-1">المتبقي على الفاتورة: <strong className="text-amber-400 font-mono">{selectedInvoice.balance_due} ج.م</strong></p>
+                <p className="text-slate-400 mt-1">المتبقي على الفاتورة: <strong className="text-rose-400 font-mono font-bold">{Number(selectedInvoice.balance_due || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })} ج.م</strong></p>
               </div>
 
               <div>

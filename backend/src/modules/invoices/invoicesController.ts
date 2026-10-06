@@ -212,7 +212,7 @@ export function createInvoice(req: Request, res: Response) {
   const grandTotal = explicitGrandTotal !== null && explicitGrandTotal > 0 ? explicitGrandTotal : computedGrandTotal;
 
   const paidAmount = Math.min(grandTotal, Math.max(0, initPayAmt));
-  const balanceDue = Math.max(0, grandTotal - paidAmount);
+  const balanceDue = Math.max(0, Math.round((grandTotal - paidAmount) * 100) / 100);
 
   let initialStatus = 'unpaid';
   if (paidAmount >= grandTotal && grandTotal > 0) {
@@ -413,8 +413,8 @@ export function registerPayment(req: Request, res: Response) {
   const receiptNumber = `RCP-${(payCount.c + 1).toString().padStart(5, '0')}`;
 
   const actualPayment = Math.min(invoice.balance_due, payAmt);
-  const newPaidAmount = invoice.paid_amount + actualPayment;
-  const newBalanceDue = Math.max(0, invoice.balance_due - actualPayment);
+  const newPaidAmount = Math.round((invoice.paid_amount + actualPayment) * 100) / 100;
+  const newBalanceDue = Math.max(0, Math.round((invoice.balance_due - actualPayment) * 100) / 100);
   const newStatus = newBalanceDue === 0 ? 'paid' : 'partially_paid';
 
   executeTransaction(() => {

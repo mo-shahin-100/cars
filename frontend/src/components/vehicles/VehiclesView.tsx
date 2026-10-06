@@ -1037,14 +1037,113 @@ export const VehiclesView: React.FC<VehiclesViewProps> = ({ initialSearch, initi
                               </span>
                             </div>
 
-                            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">{event.description}</p>
+                            {/* Timeline Event Content / Numbers Display */}
+                            {event.type === 'invoice' ? (
+                              <div className="mt-2.5 grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                                {(() => {
+                                  let total = 0;
+                                  let paid = 0;
+                                  let balance = 0;
+
+                                  if (event.details && (event.details.grand_total !== undefined || event.details.balance_due !== undefined)) {
+                                    total = Math.round((Number(event.details.grand_total) || 0) * 100) / 100;
+                                    paid = Math.round((Number(event.details.paid_amount) || 0) * 100) / 100;
+                                    balance = Math.round((Number(event.details.balance_due) || 0) * 100) / 100;
+                                  } else {
+                                    const text = String(event.description || '');
+                                    const tM = text.match(/الإجمالي:\s*([\d.]+)/);
+                                    const pM = text.match(/المدفوع:\s*([\d.]+)/);
+                                    const bM = text.match(/المتبقي:\s*([\d.]+)/);
+                                    total = tM ? Math.round(parseFloat(tM[1]) * 100) / 100 : 0;
+                                    paid = pM ? Math.round(parseFloat(pM[1]) * 100) / 100 : 0;
+                                    balance = bM ? Math.round(parseFloat(bM[1]) * 100) / 100 : 0;
+                                  }
+
+                                  return (
+                                    <>
+                                      {/* الإجمالي */}
+                                      <div className="bg-sky-950/40 border border-sky-500/30 rounded-xl p-3 flex flex-col justify-between shadow-sm">
+                                        <span className="text-xs text-sky-300 font-bold mb-1">الإجمالي الكلي:</span>
+                                        <div className="flex items-baseline justify-between">
+                                          <span className="font-mono text-base sm:text-lg font-black text-sky-400">
+                                            {total.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                                          </span>
+                                          <span className="text-[11px] text-sky-300 font-bold">ج.م</span>
+                                        </div>
+                                      </div>
+
+                                      {/* المدفوع */}
+                                      <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-xl p-3 flex flex-col justify-between shadow-sm">
+                                        <span className="text-xs text-emerald-300 font-bold mb-1">المبلغ المدفوع:</span>
+                                        <div className="flex items-baseline justify-between">
+                                          <span className="font-mono text-base sm:text-lg font-black text-emerald-400">
+                                            {paid.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                                          </span>
+                                          <span className="text-[11px] text-emerald-300 font-bold">ج.م</span>
+                                        </div>
+                                      </div>
+
+                                      {/* المتبقي */}
+                                      <div className={`rounded-xl p-3 flex flex-col justify-between shadow-sm border ${
+                                        balance > 0 
+                                          ? 'bg-rose-950/40 border-rose-500/40 shadow-rose-950/20' 
+                                          : 'bg-slate-900/60 border-slate-800 text-slate-400'
+                                      }`}>
+                                        <div className="flex items-center justify-between mb-1">
+                                          <span className={`text-xs font-bold ${balance > 0 ? 'text-rose-300' : 'text-slate-400'}`}>
+                                            الرصيد المتبقي:
+                                          </span>
+                                          {balance > 0 ? (
+                                            <span className="text-[10px] font-bold bg-rose-500/20 text-rose-300 px-2 py-0.5 rounded-full border border-rose-500/30 animate-pulse">
+                                              مستحق سداد
+                                            </span>
+                                          ) : (
+                                            <span className="text-[10px] font-bold bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded-full border border-emerald-500/30">
+                                              خالصة بالكامل ✓
+                                            </span>
+                                          )}
+                                        </div>
+                                        <div className="flex items-baseline justify-between">
+                                          <span className={`font-mono text-base sm:text-lg font-black ${
+                                            balance > 0 ? 'text-rose-400' : 'text-slate-400'
+                                          }`}>
+                                            {balance.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}
+                                          </span>
+                                          <span className={`text-[11px] font-bold ${balance > 0 ? 'text-rose-300' : 'text-slate-400'}`}>ج.م</span>
+                                        </div>
+                                      </div>
+                                    </>
+                                  );
+                                })()}
+                              </div>
+                            ) : event.type === 'fluid' && event.details ? (
+                              <div className="mt-2.5 flex flex-wrap gap-2 text-xs">
+                                <div className="bg-amber-950/40 border border-amber-500/30 rounded-xl px-3 py-1.5 flex items-center gap-1.5">
+                                  <span className="text-amber-300 font-semibold">الكمية:</span>
+                                  <span className="font-mono font-bold text-amber-400">{event.details.quantity_liters} لتر</span>
+                                </div>
+                                <div className="bg-emerald-950/40 border border-emerald-500/30 rounded-xl px-3 py-1.5 flex items-center gap-1.5">
+                                  <span className="text-emerald-300 font-semibold">الفلتر:</span>
+                                  <span className="font-bold text-emerald-400">{event.details.filter_replaced ? 'تم التغيير' : 'لم يغير'}</span>
+                                </div>
+                                {event.details.next_due_km && (
+                                  <div className="bg-sky-950/40 border border-sky-500/30 rounded-xl px-3 py-1.5 flex items-center gap-1.5">
+                                    <span className="text-sky-300 font-semibold">الصيانة القادمة عند:</span>
+                                    <span className="font-mono font-bold text-sky-400">{Number(event.details.next_due_km).toLocaleString()} كم</span>
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">{event.description}</p>
+                            )}
 
                             <div className="flex items-center justify-between mt-3 pt-2.5 border-t border-slate-800/80 text-[11px] text-slate-500">
                               <span>المسؤول: {event.authorName || 'موظف النظام'}</span>
                               {event.odometer && (
-                                <span className="font-mono flex items-center gap-1 text-slate-400">
+                                <span className="font-mono flex items-center gap-1.5 text-xs font-bold text-sky-400 bg-sky-950/40 px-2.5 py-1 rounded-lg border border-sky-500/30">
                                   <Gauge className="w-3.5 h-3.5 text-sky-400" />
-                                  عداد: {event.odometer.toLocaleString()} كم
+                                  <span className="text-slate-400 font-normal">عداد:</span>
+                                  <span>{Number(event.odometer).toLocaleString()} كم</span>
                                 </span>
                               )}
                             </div>

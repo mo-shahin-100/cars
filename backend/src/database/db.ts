@@ -96,6 +96,14 @@ export function initDatabase() {
     console.error('Error seeding screenshot demo parts:', e);
   }
 
+  // Round floating point inaccuracies in invoices and customers
+  try {
+    db.prepare('UPDATE invoices SET balance_due = ROUND(balance_due, 2), grand_total = ROUND(grand_total, 2), paid_amount = ROUND(paid_amount, 2)').run();
+    db.prepare('UPDATE customers SET total_balance_due = ROUND(total_balance_due, 2)').run();
+  } catch (e) {
+    // ignore
+  }
+
   console.log('Database initialized successfully with foreign keys and WAL mode.');
 }
 
