@@ -3,11 +3,10 @@ import {
   Truck,
   Plus,
   Search,
-  DollarSign,
   FileText,
   Clock,
-  CheckCircle,
-  AlertCircle,
+  CheckCircle2,
+  AlertTriangle,
   Building2,
   Phone,
   Mail,
@@ -21,43 +20,22 @@ import {
   Package,
   Layers,
   Calendar,
-  Sparkles,
-  Droplet,
-  Lightbulb,
   Filter,
-  Check,
-  Camera,
-  Upload,
   Eye,
   Paperclip,
-  Loader2,
-  Image as ImageIcon
+  Check,
+  TrendingUp,
+  Receipt,
+  ArrowUpRight,
+  RefreshCw,
+  Wallet,
+  Users,
+  AlertCircle
 } from 'lucide-react';
 import { api } from '../../services/api';
-import { Supplier, PurchaseInvoice, Part } from '../../types';
+import { Supplier, PurchaseInvoice, Part, SupplierPayment } from '../../types';
 import { useSync } from '../../context/SyncContext';
-
-const ARABIC_MONTHS: Record<string, string> = {
-  '01': 'يناير',
-  '02': 'فبراير',
-  '03': 'مارس',
-  '04': 'أبريل',
-  '05': 'مايو',
-  '06': 'يونيو',
-  '07': 'يوليو',
-  '08': 'أغسطس',
-  '09': 'سبتمبر',
-  '10': 'أكتوبر',
-  '11': 'نوفمبر',
-  '12': 'ديسمبر'
-};
-
-export const formatMonthName = (yearMonth: string) => {
-  if (!yearMonth || yearMonth.length < 7) return yearMonth || '';
-  const [year, month] = yearMonth.slice(0, 7).split('-');
-  const name = ARABIC_MONTHS[month] || month;
-  return `${name} ${year}`;
-};
+import { useAuth } from '../../context/AuthContext';
 
 const SUPPLIER_CATEGORIES = [
   { id: 'all', label: 'جميع التصنيفات' },
@@ -69,54 +47,68 @@ const SUPPLIER_CATEGORIES = [
   { id: 'متنوع', label: 'مورد متنوع' }
 ];
 
-export const PurchasesView: React.FC = () => {
-  // Navigation / Tabs
-  const [activeTab, setActiveTab] = useState<'invoices' | 'suppliers'>('invoices');
+const PAYMENT_METHODS = [
+  { id: 'all', label: 'جميع طرق الدفع' },
+  { id: 'cash', label: 'نقدي (كاش)' },
+  { id: 'transfer', label: 'تحويل بنكي' },
+  { id: 'card', label: 'بطاقة مدى / ائتمان' },
+  { id: 'credit', label: 'آجل (على الحساب)' }
+];
 
-  // Data States
+export const PurchasesView: React.FC = () => {
+  const { user } = useAuth();
+  const { lastEvent } = useSync();
+
+  // Permissions
+  const isOwnerOrManager = user?.role === 'owner' || user?.role === 'manager';
+  const canManage = isOwnerOrManager || user?.permissions?.includes('inventory.manage') || user?.permissions?.includes('purchases');
+  const canDelete = isOwnerOrManager;
+
+  // Tabs & Views
+  const [activeTab, setActiveTab] = useState<'invoices' | 'suppliers'>('invoices');
+  const [loading, setLoading] = useState(true);
+
+  // Data
   const [invoices, setInvoices] = useState<PurchaseInvoice[]>([]);
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [inventoryParts, setInventoryParts] = useState<Part[]>([]);
   const [invoicesSummary, setInvoicesSummary] = useState<any>(null);
-  const [suppliersSummary, setSuppliersSummary] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
 
-  // Filters & Search
-  const [searchQuery, setSearchQuery] = useState('');
-  const [invoiceStatusFilter, setInvoiceStatusFilter] = useState<'all' | 'paid' | 'unpaid'>('all');
+  // Invoices Filters
+  const [invoiceSearch, setInvoiceSearch] = useState('');
+  const [invoiceStatusFilter, setInvoiceStatusFilter] = useState<'all' | 'paid' | 'partially_paid' | 'unpaid' | 'overdue'>('all');
+  const [invoiceSupplierFilter, setInvoiceSupplierFilter] = useState('all');
+  const [invoicePaymentMethodFilter, setInvoicePaymentMethodFilter] = useState('all');
+
+  // Suppliers Filters
+  const [supplierSearch, setSupplierSearch] = useState('');
+  const [supplierStatusFilter, setSupplierStatusFilter] = useState<'all' | 'paid' | 'unpaid' | 'overdue'>('all');
   const [supplierCategoryFilter, setSupplierCategoryFilter] = useState('all');
-  const [selectedMonth, setSelectedMonth] = useState<string>('all');
-  const [showMonthlyBreakdown, setShowMonthlyBreakdown] = useState<boolean>(false);
 
   // Modals
   const [showCreateInvoiceModal, setShowCreateInvoiceModal] = useState(false);
+  const [showEditInvoiceModal, setShowEditInvoiceModal] = useState(false);
   const [showSupplierModal, setShowSupplierModal] = useState(false);
+  const [showSupplierDetailModal, setShowSupplierDetailModal] = useState(false);
   const [showInvoiceDetailsModal, setShowInvoiceDetailsModal] = useState(false);
-  const [showSupplierLedgerModal, setShowSupplierLedgerModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [previewImage, setPreviewImage] = useState<string | null>(null);
+  const [showPrintModal, setShowPrintModal] = useState(false);
 
-  // Selected Records
+  // Selected records
   const [selectedInvoice, setSelectedInvoice] = useState<PurchaseInvoice | null>(null);
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null);
-  const [supplierDetails, setSupplierDetails] = useState<any>(null);
+  const [supplierDetailTab, setSupplierDetailTab] = useState<'invoices' | 'payments' | 'ledger' | 'info'>('invoices');
+  const [supplierDetailsData, setSupplierDetailsData] = useState<any>(null);
+  const [loadingSupplierDetails, setLoadingSupplierDetails] = useState(false);
+
+  // Supplier Form Data (Create/Edit)
   const [isEditingSupplier, setIsEditingSupplier] = useState(false);
-
-  // Payment Form State
-  const [paymentAmount, setPaymentAmount] = useState<number>(0);
-  const [paymentMethod, setPaymentMethod] = useState<string>('transfer');
-  const [paymentNotes, setPaymentNotes] = useState<string>('');
-  const [paymentTargetType, setPaymentTargetType] = useState<'invoice' | 'supplier'>('invoice');
-
-  // File Upload State
-  const [uploadingImage, setUploadingImage] = useState(false);
-
-  // New Supplier Form
   const [supplierFormData, setSupplierFormData] = useState({
     id: '',
     name: '',
     contact_person: '',
     phone: '',
+    phone_secondary: '',
     email: '',
     tax_number: '',
     address: '',
@@ -124,8 +116,32 @@ export const PurchasesView: React.FC = () => {
     payment_terms: 'cash',
     notes: ''
   });
+  const [supplierSubmitting, setSupplierSubmitting] = useState(false);
 
-  // New Invoice Form (without supplier tax number, with invoice_image_url)
+  // Payment Form Data
+  const [paymentAmount, setPaymentAmount] = useState<number>(0);
+  const [paymentMethod, setPaymentMethod] = useState<string>('transfer');
+  const [paymentDate, setPaymentDate] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [paymentRefNumber, setPaymentRefNumber] = useState<string>('');
+  const [paymentNotes, setPaymentNotes] = useState<string>('');
+  const [paymentTarget, setPaymentTarget] = useState<{
+    type: 'invoice' | 'supplier';
+    invoice?: PurchaseInvoice;
+    supplier?: Supplier;
+  } | null>(null);
+  const [paymentSubmitting, setPaymentSubmitting] = useState(false);
+
+  // Edit Invoice Form
+  const [editInvoiceData, setEditInvoiceData] = useState({
+    id: '',
+    invoice_number: '',
+    due_date: '',
+    payment_method: 'cash',
+    notes: ''
+  });
+  const [editInvoiceSubmitting, setEditInvoiceSubmitting] = useState(false);
+
+  // Create Invoice Form Data
   const [invoiceFormData, setInvoiceFormData] = useState({
     supplier_id: '',
     supplier_name: '',
@@ -136,25 +152,27 @@ export const PurchasesView: React.FC = () => {
     payment_method: 'cash',
     paid_amount: 0,
     tax_percent: 15,
+    discount_amount: 0,
     notes: '',
-    invoice_image_url: '',
     items: [
       {
         part_id: '',
         item_name: '',
         part_number: '',
+        sku: '',
         quantity: 1,
         unit_cost: 0,
+        discount: 0,
+        update_inventory: true,
         category: 'قطع غيار',
         is_new_part: false,
-        create_in_inventory: false,
-        storage_location: 'المستودع الرئيسي',
-        sale_price: 0
+        sale_price: 0,
+        min_stock_alert: 2,
+        storage_location: 'المستودع الرئيسي'
       }
     ]
   });
-
-  const { lastEvent } = useSync();
+  const [invoiceSubmitting, setInvoiceSubmitting] = useState(false);
 
   // Load Data
   const loadData = async () => {
@@ -167,15 +185,14 @@ export const PurchasesView: React.FC = () => {
       ]);
 
       if (invRes.success) {
-        setInvoices(invRes.data);
-        setInvoicesSummary(invRes.summary);
+        setInvoices(invRes.data || []);
+        setInvoicesSummary(invRes.summary || null);
       }
       if (supRes.success) {
-        setSuppliers(supRes.data);
-        setSuppliersSummary(supRes.summary);
+        setSuppliers(supRes.data || []);
       }
       if (partsRes.success) {
-        setInventoryParts(partsRes.data);
+        setInventoryParts(partsRes.data || []);
       }
     } catch (err) {
       console.error('Failed to load purchases data:', err);
@@ -188,1854 +205,1687 @@ export const PurchasesView: React.FC = () => {
     loadData();
   }, []);
 
-  // Listen for sync events
   useEffect(() => {
     if (lastEvent?.entity === 'purchases' || lastEvent?.entity === 'suppliers' || lastEvent?.entity === 'inventory') {
       loadData();
+      if (selectedSupplier) {
+        loadSupplierDetails(selectedSupplier.id);
+      }
     }
   }, [lastEvent]);
 
-  // Handle Supplier Selection in Invoice Form
-  const handleSelectSupplierForInvoice = (supplierId: string) => {
-    const s = suppliers.find(sup => sup.id === supplierId);
-    if (s) {
-      setInvoiceFormData(prev => ({
-        ...prev,
-        supplier_id: s.id,
-        supplier_name: s.name,
-        supplier_phone: s.phone || ''
-      }));
-    } else {
-      setInvoiceFormData(prev => ({
-        ...prev,
-        supplier_id: '',
-        supplier_name: '',
-        supplier_phone: ''
-      }));
+  // Load Full Supplier Details
+  const loadSupplierDetails = async (supplierId: string) => {
+    setLoadingSupplierDetails(true);
+    try {
+      const res = await api.getSupplierById(supplierId);
+      if (res.success && res.data) {
+        setSupplierDetailsData(res.data);
+      }
+    } catch (err) {
+      console.error('Failed to load supplier details:', err);
+    } finally {
+      setLoadingSupplierDetails(false);
     }
   };
 
-  // Upload Invoice Photo
-  const handleInvoiceImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const handleOpenSupplierDetails = (supplier: Supplier, initialTab: 'invoices' | 'payments' | 'ledger' | 'info' = 'invoices') => {
+    setSelectedSupplier(supplier);
+    setSupplierDetailTab(initialTab);
+    setShowSupplierDetailModal(true);
+    loadSupplierDetails(supplier.id);
+  };
 
-    setUploadingImage(true);
+  // ==========================================
+  // Summary Metrics Calculation
+  // ==========================================
+  const currentMonthKey = new Date().toISOString().slice(0, 7);
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  const summary = useMemo(() => {
+    const thisMonthPurchases = invoicesSummary?.this_month_purchases ?? invoices
+      .filter((inv) => (inv.invoice_date || '').startsWith(currentMonthKey))
+      .reduce((sum, inv) => sum + Number(inv.grand_total || 0), 0);
+
+    const prevMonthPurchases = Number(invoicesSummary?.prev_month_purchases || 0);
+
+    let monthDiffPct: number | null = null;
+    if (prevMonthPurchases > 0) {
+      monthDiffPct = Math.round(((thisMonthPurchases - prevMonthPurchases) / prevMonthPurchases) * 100);
+    }
+
+    const totalPaid = invoicesSummary?.total_paid ?? invoices.reduce((sum, inv) => sum + Number(inv.paid_amount || 0), 0);
+    const totalBalanceDue = invoicesSummary?.total_balance_due ?? invoices.reduce((sum, inv) => sum + Number(inv.balance_due || 0), 0);
+    const totalSuppliersCount = invoicesSummary?.total_suppliers ?? suppliers.length;
+    const totalInvoicesCount = invoicesSummary?.total_invoices ?? invoices.length;
+
+    const overdueCount = invoicesSummary?.overdue_invoices_count ?? invoices.filter((inv) =>
+      Number(inv.balance_due) > 0 && inv.due_date && inv.due_date < todayStr
+    ).length;
+
+    const unpaidCount = invoicesSummary?.unpaid_invoices_count ?? invoices.filter((inv) => Number(inv.balance_due) > 0).length;
+
+    return {
+      thisMonthPurchases,
+      prevMonthPurchases,
+      monthDiffPct,
+      totalPaid,
+      totalBalanceDue,
+      totalSuppliersCount,
+      totalInvoicesCount,
+      overdueCount,
+      unpaidCount
+    };
+  }, [invoices, suppliers, invoicesSummary, currentMonthKey, todayStr]);
+
+  // ==========================================
+  // Filtered Invoices
+  // ==========================================
+  const filteredInvoices = useMemo(() => {
+    return invoices.filter((inv) => {
+      // Search
+      if (invoiceSearch.trim()) {
+        const q = invoiceSearch.toLowerCase().trim();
+        const num = (inv.invoice_number || '').toLowerCase();
+        const sup = (inv.supplier_name || '').toLowerCase();
+        const phone = (inv.supplier_phone || '').toLowerCase();
+        const notes = (inv.notes || '').toLowerCase();
+        if (!num.includes(q) && !sup.includes(q) && !phone.includes(q) && !notes.includes(q)) {
+          return false;
+        }
+      }
+
+      // Status
+      if (invoiceStatusFilter !== 'all') {
+        const isOverdue = Number(inv.balance_due) > 0 && inv.due_date && inv.due_date < todayStr;
+        if (invoiceStatusFilter === 'overdue') {
+          if (!isOverdue) return false;
+        } else if (invoiceStatusFilter === 'paid') {
+          if (inv.payment_status !== 'paid' && Number(inv.balance_due) > 0) return false;
+        } else if (invoiceStatusFilter === 'partially_paid') {
+          if (inv.payment_status !== 'partially_paid') return false;
+        } else if (invoiceStatusFilter === 'unpaid') {
+          if (inv.payment_status !== 'unpaid' && Number(inv.balance_due) <= 0) return false;
+        }
+      }
+
+      // Supplier
+      if (invoiceSupplierFilter !== 'all') {
+        if (inv.supplier_id !== invoiceSupplierFilter && inv.supplier_name !== invoiceSupplierFilter) {
+          return false;
+        }
+      }
+
+      // Payment Method
+      if (invoicePaymentMethodFilter !== 'all') {
+        if (inv.payment_method !== invoicePaymentMethodFilter) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [invoices, invoiceSearch, invoiceStatusFilter, invoiceSupplierFilter, invoicePaymentMethodFilter, todayStr]);
+
+  // ==========================================
+  // Filtered Suppliers
+  // ==========================================
+  const filteredSuppliers = useMemo(() => {
+    return suppliers.filter((sup) => {
+      // Search
+      if (supplierSearch.trim()) {
+        const q = supplierSearch.toLowerCase().trim();
+        const name = (sup.name || '').toLowerCase();
+        const contact = (sup.contact_person || '').toLowerCase();
+        const phone = (sup.phone || '').toLowerCase();
+        const phoneSec = (sup.phone_secondary || '').toLowerCase();
+        const email = (sup.email || '').toLowerCase();
+        if (!name.includes(q) && !contact.includes(q) && !phone.includes(q) && !phoneSec.includes(q) && !email.includes(q)) {
+          return false;
+        }
+      }
+
+      // Status
+      if (supplierStatusFilter !== 'all') {
+        const balance = Number(sup.balance_due || 0);
+        const isOverdue = (sup.overdue_count || 0) > 0;
+        if (supplierStatusFilter === 'overdue') {
+          if (!isOverdue) return false;
+        } else if (supplierStatusFilter === 'paid') {
+          if (balance > 0) return false;
+        } else if (supplierStatusFilter === 'unpaid') {
+          if (balance <= 0 || isOverdue) return false;
+        }
+      }
+
+      // Category
+      if (supplierCategoryFilter !== 'all') {
+        if (sup.category !== supplierCategoryFilter) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [suppliers, supplierSearch, supplierStatusFilter, supplierCategoryFilter]);
+
+  // ==========================================
+  // Supplier Actions: Create / Edit / Delete
+  // ==========================================
+  const handleOpenAddSupplier = () => {
+    setIsEditingSupplier(false);
+    setSupplierFormData({
+      id: '',
+      name: '',
+      contact_person: '',
+      phone: '',
+      phone_secondary: '',
+      email: '',
+      tax_number: '',
+      address: '',
+      category: 'قطع غيار',
+      payment_terms: 'cash',
+      notes: ''
+    });
+    setShowSupplierModal(true);
+  };
+
+  const handleOpenEditSupplier = (supplier: Supplier) => {
+    setIsEditingSupplier(true);
+    setSupplierFormData({
+      id: supplier.id,
+      name: supplier.name,
+      contact_person: supplier.contact_person || '',
+      phone: supplier.phone || '',
+      phone_secondary: supplier.phone_secondary || '',
+      email: supplier.email || '',
+      tax_number: supplier.tax_number || '',
+      address: supplier.address || '',
+      category: supplier.category || 'قطع غيار',
+      payment_terms: supplier.payment_terms || 'cash',
+      notes: supplier.notes || ''
+    });
+    setShowSupplierModal(true);
+  };
+
+  const handleSaveSupplier = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!supplierFormData.name.trim()) {
+      alert('اسم المورد أو الشركة حقل إلزامي');
+      return;
+    }
+
+    setSupplierSubmitting(true);
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('category', 'purchase_invoice');
-      formData.append('caption', `فاتورة مورد: ${invoiceFormData.supplier_name || 'توريد'}`);
-
-      const res = await api.uploadAttachment(formData);
-      if (res.success && res.data?.file_path) {
-        setInvoiceFormData(prev => ({
-          ...prev,
-          invoice_image_url: res.data.file_path
-        }));
+      if (isEditingSupplier) {
+        await api.updateSupplier(supplierFormData.id, supplierFormData);
+      } else {
+        await api.createSupplier(supplierFormData);
+      }
+      setShowSupplierModal(false);
+      loadData();
+      if (selectedSupplier && selectedSupplier.id === supplierFormData.id) {
+        loadSupplierDetails(supplierFormData.id);
       }
     } catch (err: any) {
-      alert('فشل في رفع صورة الفاتورة: ' + (err.message || 'خطأ في الرفع'));
+      alert(err.message || 'فشل حفظ بيانات المورد');
     } finally {
-      setUploadingImage(false);
+      setSupplierSubmitting(false);
     }
   };
 
-  // Add Item to Invoice Form
-  const handleAddItemToInvoice = () => {
-    setInvoiceFormData(prev => ({
-      ...prev,
+  const handleDeleteSupplier = async (supplierId: string, supplierName: string) => {
+    if (!canDelete) {
+      alert('ليس لديك صلاحية حذف الموردين (تتطلب دور المدير أو المالك)');
+      return;
+    }
+    if (!window.confirm(`هل أنت متأكد من حذف المورد "${supplierName}" من النظام؟`)) {
+      return;
+    }
+    try {
+      await api.deleteSupplier(supplierId);
+      if (selectedSupplier?.id === supplierId) {
+        setShowSupplierDetailModal(false);
+        setSelectedSupplier(null);
+      }
+      loadData();
+    } catch (err: any) {
+      alert(err.message || 'فشل حذف المورد');
+    }
+  };
+
+  // ==========================================
+  // Invoice Actions: Create / Edit / Delete
+  // ==========================================
+  const handleOpenCreateInvoice = () => {
+    setInvoiceFormData({
+      supplier_id: '',
+      supplier_name: '',
+      supplier_phone: '',
+      invoice_number: `INV-${Date.now().toString().slice(-6)}`,
+      invoice_date: new Date().toISOString().slice(0, 10),
+      due_date: '',
+      payment_method: 'cash',
+      paid_amount: 0,
+      tax_percent: 15,
+      discount_amount: 0,
+      notes: '',
       items: [
-        ...prev.items,
         {
           part_id: '',
           item_name: '',
           part_number: '',
+          sku: '',
           quantity: 1,
           unit_cost: 0,
+          discount: 0,
+          update_inventory: true,
           category: 'قطع غيار',
           is_new_part: false,
-          create_in_inventory: false,
-          storage_location: 'المستودع الرئيسي',
-          sale_price: 0
+          sale_price: 0,
+          min_stock_alert: 2,
+          storage_location: 'المستودع الرئيسي'
         }
       ]
-    }));
+    });
+    setShowCreateInvoiceModal(true);
   };
 
-  // Remove Item from Invoice Form
+  // Dynamic calculations for create invoice modal
+  const invoiceCalculations = useMemo(() => {
+    const subtotal = invoiceFormData.items.reduce((sum, item) => {
+      const q = Number(item.quantity || 0);
+      const c = Number(item.unit_cost || 0);
+      const d = Number(item.discount || 0);
+      return sum + Math.max(0, (q * c) - d);
+    }, 0);
+
+    const overallDiscount = Number(invoiceFormData.discount_amount || 0);
+    const afterDiscount = Math.max(0, subtotal - overallDiscount);
+    const taxAmount = (afterDiscount * Number(invoiceFormData.tax_percent || 0)) / 100;
+    const grandTotal = afterDiscount + taxAmount;
+    const paid = Number(invoiceFormData.paid_amount || 0);
+    const remaining = Math.max(0, grandTotal - paid);
+
+    return {
+      subtotal,
+      overallDiscount,
+      afterDiscount,
+      taxAmount,
+      grandTotal,
+      paid,
+      remaining
+    };
+  }, [invoiceFormData]);
+
+  const handleAddItemToInvoice = () => {
+    setInvoiceFormData({
+      ...invoiceFormData,
+      items: [
+        ...invoiceFormData.items,
+        {
+          part_id: '',
+          item_name: '',
+          part_number: '',
+          sku: '',
+          quantity: 1,
+          unit_cost: 0,
+          discount: 0,
+          update_inventory: true,
+          category: 'قطع غيار',
+          is_new_part: false,
+          sale_price: 0,
+          min_stock_alert: 2,
+          storage_location: 'المستودع الرئيسي'
+        }
+      ]
+    });
+  };
+
   const handleRemoveItemFromInvoice = (index: number) => {
-    if (invoiceFormData.items.length === 1) return;
-    setInvoiceFormData(prev => ({
-      ...prev,
-      items: prev.items.filter((_, i) => i !== index)
-    }));
+    if (invoiceFormData.items.length <= 1) return;
+    const items = [...invoiceFormData.items];
+    items.splice(index, 1);
+    setInvoiceFormData({ ...invoiceFormData, items });
   };
 
-  // Update Item in Invoice Form
-  const handleUpdateItem = (index: number, field: string, value: any) => {
-    const newItems = [...invoiceFormData.items];
-    const item = { ...newItems[index], [field]: value };
-
-    // If selecting an existing inventory part
-    if (field === 'part_id') {
-      const part = inventoryParts.find(p => p.id === value);
-      if (part) {
-        item.item_name = part.name;
-        item.part_number = part.part_number;
-        item.unit_cost = part.cost_price;
-        item.category = part.category;
-        item.sale_price = part.sale_price;
-        item.is_new_part = false;
-      }
-    }
-
-    newItems[index] = item;
-    setInvoiceFormData(prev => ({ ...prev, items: newItems }));
-  };
-
-  // Calculations for Invoice Creation
-  const invoiceSubtotal = invoiceFormData.items.reduce((acc, it) => acc + (Number(it.quantity || 1) * Number(it.unit_cost || 0)), 0);
-  const invoiceTaxAmount = (invoiceSubtotal * (Number(invoiceFormData.tax_percent || 15))) / 100;
-  const invoiceGrandTotal = invoiceSubtotal + invoiceTaxAmount;
-  const invoiceBalanceDue = Math.max(0, invoiceGrandTotal - Number(invoiceFormData.paid_amount || 0));
-
-  // Submit Create Invoice
-  const handleCreateInvoiceSubmit = async (e: React.FormEvent) => {
+  const handleSaveInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!invoiceFormData.supplier_name.trim()) {
-      alert('يرجى تحديد أو إدخال اسم المورد');
+      alert('يرجى اختيار أو كتابة اسم المورد');
       return;
     }
-    if (invoiceFormData.items.some(it => !it.item_name.trim() || Number(it.quantity) <= 0)) {
-      alert('يرجى التأكد من كتابة اسم الصنف والكمية لجميع البنود');
+    if (invoiceFormData.items.some((it) => !it.item_name.trim() || Number(it.unit_cost) < 0 || Number(it.quantity) <= 0)) {
+      alert('يرجى التأكد من إدخال اسم الصنف والكمية والتكلفة لجميع البنود');
       return;
     }
 
+    setInvoiceSubmitting(true);
     try {
-      const payload = {
-        ...invoiceFormData,
-        subtotal: invoiceSubtotal,
-        tax_amount: invoiceTaxAmount,
-        grand_total: invoiceGrandTotal
-      };
-
-      const res = await api.createPurchaseInvoice(payload);
-      if (res.success) {
-        alert(res.message || 'تم حفظ فاتورة المورد بنجاح');
-        setShowCreateInvoiceModal(false);
-        // Reset form
-        setInvoiceFormData({
-          supplier_id: '',
-          supplier_name: '',
-          supplier_phone: '',
-          invoice_number: '',
-          invoice_date: new Date().toISOString().slice(0, 10),
-          due_date: '',
-          payment_method: 'cash',
-          paid_amount: 0,
-          tax_percent: 15,
-          notes: '',
-          invoice_image_url: '',
-          items: [
-            {
-              part_id: '',
-              item_name: '',
-              part_number: '',
-              quantity: 1,
-              unit_cost: 0,
-              category: 'قطع غيار',
-              is_new_part: false,
-              create_in_inventory: false,
-              storage_location: 'المستودع الرئيسي',
-              sale_price: 0
-            }
-          ]
-        });
-        loadData();
-      }
+      await api.createPurchaseInvoice(invoiceFormData);
+      setShowCreateInvoiceModal(false);
+      loadData();
     } catch (err: any) {
-      alert('فشل في حفظ الفاتورة: ' + (err.message || 'خطأ غير معروف'));
+      alert(err.message || 'فشل حفظ فاتورة المشتريات');
+    } finally {
+      setInvoiceSubmitting(false);
     }
   };
 
-  // Submit Supplier Form (Create or Edit)
-  const handleSupplierSubmit = async (e: React.FormEvent) => {
+  const handleOpenEditInvoice = (invoice: PurchaseInvoice) => {
+    setSelectedInvoice(invoice);
+    setEditInvoiceData({
+      id: invoice.id,
+      invoice_number: invoice.invoice_number,
+      due_date: invoice.due_date || '',
+      payment_method: invoice.payment_method || 'cash',
+      notes: invoice.notes || ''
+    });
+    setShowEditInvoiceModal(true);
+  };
+
+  const handleSaveEditInvoice = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!supplierFormData.name.trim()) {
-      alert('اسم المورد حقل إلزامي');
+    setEditInvoiceSubmitting(true);
+    try {
+      await api.updatePurchaseInvoice(editInvoiceData.id, editInvoiceData);
+      setShowEditInvoiceModal(false);
+      loadData();
+      if (selectedInvoice && selectedInvoice.id === editInvoiceData.id) {
+        const refreshed = await api.getPurchaseInvoiceById(editInvoiceData.id);
+        if (refreshed.success && refreshed.data) {
+          setSelectedInvoice(refreshed.data);
+        }
+      }
+    } catch (err: any) {
+      alert(err.message || 'فشل تحديث بيانات الفاتورة');
+    } finally {
+      setEditInvoiceSubmitting(false);
+    }
+  };
+
+  const handleDeleteInvoice = async (invoiceId: string, invoiceNumber: string) => {
+    if (!canDelete) {
+      alert('ليس لديك صلاحية حذف فواتير المشتريات (تتطلب دور المدير أو المالك)');
       return;
     }
-
+    if (!window.confirm(`هل أنت متأكد من حذف فاتورة المشتريات رقم "${invoiceNumber}"؟ سيتم استرجاع أرصدة المخزون وحذف الحركات المسجلة.`)) {
+      return;
+    }
     try {
-      if (isEditingSupplier && supplierFormData.id) {
-        const res = await api.updateSupplier(supplierFormData.id, supplierFormData);
-        if (res.success) {
-          alert('تم تحديث بيانات المورد بنجاح');
-          setShowSupplierModal(false);
-          loadData();
-        }
-      } else {
-        const res = await api.createSupplier(supplierFormData);
-        if (res.success) {
-          alert(res.message || 'تم إضافة المورد بنجاح');
-          setShowSupplierModal(false);
-          loadData();
-        }
+      await api.deletePurchaseInvoice(invoiceId);
+      if (selectedInvoice?.id === invoiceId) {
+        setShowInvoiceDetailsModal(false);
+        setSelectedInvoice(null);
       }
+      loadData();
     } catch (err: any) {
-      alert('خطأ: ' + (err.message || 'فشلت العملية'));
+      alert(err.message || 'فشل حذف فاتورة المشتريات');
     }
   };
 
-  // Delete Supplier
-  const handleDeleteSupplier = async (supplier: Supplier) => {
-    if (!window.confirm(`هل أنت متأكد من حذف المورد "${supplier.name}"؟`)) return;
-    try {
-      const res = await api.deleteSupplier(supplier.id);
-      if (res.success) {
-        alert(res.message || 'تم حذف المورد بنجاح');
-        loadData();
-      }
-    } catch (err: any) {
-      alert('فشل في حذف المورد: ' + err.message);
-    }
-  };
-
-  // Delete Invoice
-  const handleDeleteInvoice = async (inv: PurchaseInvoice) => {
-    if (!window.confirm(`هل أنت متأكد من حذف فاتورة المورد رقم [${inv.invoice_number}]؟`)) return;
-    try {
-      const res = await api.deletePurchaseInvoice(inv.id);
-      if (res.success) {
-        alert('تم حذف الفاتورة بنجاح');
-        if (showInvoiceDetailsModal) setShowInvoiceDetailsModal(false);
-        loadData();
-      }
-    } catch (err: any) {
-      alert('فشل في حذف الفاتورة: ' + err.message);
-    }
-  };
-
-  // Open Invoice Details
-  const handleViewInvoiceDetails = async (invoice: PurchaseInvoice) => {
-    try {
-      const res = await api.getPurchaseInvoiceById(invoice.id);
-      if (res.success) {
-        setSelectedInvoice(res.data);
-        setShowInvoiceDetailsModal(true);
-      }
-    } catch (err: any) {
-      alert('فشل في تحميل تفاصيل الفاتورة: ' + err.message);
-    }
-  };
-
-  // Open Supplier Ledger
-  const handleViewSupplierLedger = async (supplier: Supplier) => {
-    try {
-      setSelectedSupplier(supplier);
-      const res = await api.getSupplierById(supplier.id);
-      if (res.success) {
-        setSupplierDetails(res.data);
-        setShowSupplierLedgerModal(true);
-      }
-    } catch (err: any) {
-      alert('فشل في تحميل كشف حساب المورد: ' + err.message);
-    }
-  };
-
-  // Open Payment Modal
-  const handleOpenPaymentModal = (target: 'invoice' | 'supplier', item: any) => {
-    setPaymentTargetType(target);
-    if (target === 'invoice') {
-      setSelectedInvoice(item);
-      setPaymentAmount(item.balance_due || 0);
-    } else {
-      setSelectedSupplier(item);
-      setPaymentAmount(item.balance_due || 0);
-    }
+  // ==========================================
+  // Payment Actions
+  // ==========================================
+  const handleOpenPayment = (target: { type: 'invoice'; invoice: PurchaseInvoice } | { type: 'supplier'; supplier: Supplier }) => {
+    setPaymentTarget(target);
+    const balance = target.type === 'invoice' ? Number(target.invoice.balance_due || 0) : Number(target.supplier.balance_due || 0);
+    setPaymentAmount(balance);
     setPaymentMethod('transfer');
+    setPaymentDate(new Date().toISOString().slice(0, 10));
+    setPaymentRefNumber('');
     setPaymentNotes('');
     setShowPaymentModal(true);
   };
 
-  // Submit Payment
-  const handleSubmitPayment = async (e: React.FormEvent) => {
+  const handleSavePayment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (paymentAmount <= 0) {
-      alert('مبلغ السداد يجب أن يكون أكبر من صفر');
+    if (!paymentTarget || paymentAmount <= 0) {
+      alert('يرجى إدخال مبلغ سداد صحيح أكبر من صفر');
       return;
     }
 
+    setPaymentSubmitting(true);
     try {
-      if (paymentTargetType === 'invoice' && selectedInvoice) {
-        const res = await api.recordSupplierPayment(selectedInvoice.id, {
+      if (paymentTarget.type === 'invoice' && paymentTarget.invoice) {
+        await api.recordSupplierPayment(paymentTarget.invoice.id, {
           amount: paymentAmount,
           payment_method: paymentMethod,
           notes: paymentNotes
         });
-        if (res.success) {
-          alert(res.message || 'تم تسجيل سداد الفاتورة بنجاح');
-          setShowPaymentModal(false);
-          if (showInvoiceDetailsModal) setShowInvoiceDetailsModal(false);
-          loadData();
-        }
-      } else if (paymentTargetType === 'supplier' && selectedSupplier) {
-        const res = await api.paySupplierBalance(selectedSupplier.id, {
+      } else if (paymentTarget.type === 'supplier' && paymentTarget.supplier) {
+        await api.paySupplierBalance(paymentTarget.supplier.id, {
           amount: paymentAmount,
           payment_method: paymentMethod,
           notes: paymentNotes
         });
-        if (res.success) {
-          alert(res.message || 'تم سداد دفعة لحساب المورد بنجاح');
-          setShowPaymentModal(false);
-          if (showSupplierLedgerModal) setShowSupplierLedgerModal(false);
-          loadData();
-        }
+      }
+      setShowPaymentModal(false);
+      setPaymentTarget(null);
+      loadData();
+      if (selectedSupplier) {
+        loadSupplierDetails(selectedSupplier.id);
       }
     } catch (err: any) {
-      alert('فشل في تسجيل السداد: ' + err.message);
+      alert(err.message || 'فشل تسجيل الدفعة للمورد');
+    } finally {
+      setPaymentSubmitting(false);
     }
   };
 
-  // Print Invoice Function
-  const handlePrintInvoice = () => {
-    window.print();
+  // ==========================================
+  // View & Print Invoices
+  // ==========================================
+  const handleOpenInvoiceDetails = async (invoice: PurchaseInvoice) => {
+    try {
+      const res = await api.getPurchaseInvoiceById(invoice.id);
+      if (res.success && res.data) {
+        setSelectedInvoice(res.data);
+      } else {
+        setSelectedInvoice(invoice);
+      }
+    } catch {
+      setSelectedInvoice(invoice);
+    }
+    setShowInvoiceDetailsModal(true);
   };
 
-  // Dates & Months helpers
-  const now = new Date();
-  const currentYearMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  const prevDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-  const prevYearMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, '0')}`;
-
-  // Available Months List for Dropdown
-  const availableMonths = useMemo(() => {
-    const monthsMap = new Map<string, number>();
-
-    // Seed recent 6 months
-    const cur = new Date();
-    for (let i = 0; i < 6; i++) {
-      const d = new Date(cur.getFullYear(), cur.getMonth() - i, 1);
-      const ym = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-      monthsMap.set(ym, 0);
-    }
-
-    // Tally from invoices
-    invoices.forEach((inv) => {
-      const dStr = inv.invoice_date || inv.created_at;
-      if (dStr && dStr.length >= 7) {
-        const ym = dStr.slice(0, 7);
-        monthsMap.set(ym, (monthsMap.get(ym) || 0) + 1);
+  const handleOpenPrintInvoice = async (invoice: PurchaseInvoice) => {
+    try {
+      const res = await api.getPurchaseInvoiceById(invoice.id);
+      if (res.success && res.data) {
+        setSelectedInvoice(res.data);
+      } else {
+        setSelectedInvoice(invoice);
       }
-    });
-
-    const sortedYm = Array.from(monthsMap.keys()).sort((a, b) => b.localeCompare(a));
-    return sortedYm.map((ym) => ({
-      value: ym,
-      label: formatMonthName(ym),
-      count: monthsMap.get(ym) || 0
-    }));
-  }, [invoices]);
-
-  // Aggregate monthly stats breakdown
-  const monthlyStats = useMemo(() => {
-    const map = new Map<string, {
-      month: string;
-      monthName: string;
-      count: number;
-      totalPurchases: number;
-      totalPaid: number;
-      balanceDue: number;
-    }>();
-
-    invoices.forEach((inv) => {
-      const dStr = inv.invoice_date || inv.created_at || '';
-      if (!dStr || dStr.length < 7) return;
-      const ym = dStr.slice(0, 7);
-      const item = map.get(ym) || {
-        month: ym,
-        monthName: formatMonthName(ym),
-        count: 0,
-        totalPurchases: 0,
-        totalPaid: 0,
-        balanceDue: 0
-      };
-      item.count += 1;
-      item.totalPurchases += Number(inv.grand_total || 0);
-      item.totalPaid += Number(inv.paid_amount || 0);
-      item.balanceDue += Number(inv.balance_due || 0);
-      map.set(ym, item);
-    });
-
-    return Array.from(map.values()).sort((a, b) => b.month.localeCompare(a.month));
-  }, [invoices]);
-
-  // Filtered Invoices by search, status, and month
-  const filteredInvoices = useMemo(() => {
-    return invoices.filter((inv) => {
-      const matchesSearch =
-        inv.invoice_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        inv.supplier_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (inv.supplier_phone && inv.supplier_phone.includes(searchQuery));
-
-      let matchesStatus = true;
-      if (invoiceStatusFilter === 'paid') matchesStatus = inv.payment_status === 'paid';
-      if (invoiceStatusFilter === 'unpaid') matchesStatus = inv.payment_status !== 'paid';
-
-      let matchesMonth = true;
-      if (selectedMonth !== 'all') {
-        const dStr = inv.invoice_date || inv.created_at || '';
-        matchesMonth = dStr.startsWith(selectedMonth);
-      }
-
-      return matchesSearch && matchesStatus && matchesMonth;
-    });
-  }, [invoices, searchQuery, invoiceStatusFilter, selectedMonth]);
-
-  // Dynamic KPI summary reflecting selected month
-  const activeSummary = useMemo(() => {
-    if (selectedMonth === 'all' && invoicesSummary) {
-      return {
-        total_purchases: invoicesSummary.total_purchases || 0,
-        total_paid: invoicesSummary.total_paid || 0,
-        total_balance_due: invoicesSummary.total_balance_due || 0,
-        total_invoices: invoicesSummary.total_invoices || invoices.length,
-        periodLabel: 'جميع الشهور'
-      };
+    } catch {
+      setSelectedInvoice(invoice);
     }
-
-    const total_purchases = filteredInvoices.reduce((sum, inv) => sum + Number(inv.grand_total || 0), 0);
-    const total_paid = filteredInvoices.reduce((sum, inv) => sum + Number(inv.paid_amount || 0), 0);
-    const total_balance_due = filteredInvoices.reduce((sum, inv) => sum + Number(inv.balance_due || 0), 0);
-
-    return {
-      total_purchases,
-      total_paid,
-      total_balance_due,
-      total_invoices: filteredInvoices.length,
-      periodLabel: selectedMonth !== 'all' ? formatMonthName(selectedMonth) : 'جميع الشهور'
-    };
-  }, [filteredInvoices, selectedMonth, invoicesSummary, invoices.length]);
-
-  // Filtered Suppliers
-  const filteredSuppliers = suppliers.filter(sup => {
-    const matchesSearch =
-      sup.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (sup.phone && sup.phone.includes(searchQuery)) ||
-      (sup.contact_person && sup.contact_person.toLowerCase().includes(searchQuery.toLowerCase()));
-
-    const matchesCategory =
-      supplierCategoryFilter === 'all' || sup.category === supplierCategoryFilter;
-
-    return matchesSearch && matchesCategory;
-  });
+    setShowPrintModal(true);
+  };
 
   return (
-    <div className="space-y-6 text-slate-100" dir="rtl">
-      {/* 1. Header with title & Tab Switcher */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-white/[0.08]">
-        <div>
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-gradient-to-tr from-sky-500 via-indigo-500 to-sky-400 rounded-2xl shadow-xl shadow-sky-500/20 text-white">
-              <Truck className="w-6 h-6 stroke-[2.5]" />
+    <div className="space-y-6 pb-12 animate-in fade-in duration-200">
+
+      {/* ============================================================== */}
+      {/* 1. TOP SUMMARY DASHBOARD (6 Interactive Professional Cards)     */}
+      {/* ============================================================== */}
+      <div>
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Truck className="w-5 h-5 text-sky-400" />
+            <h2 className="text-base font-black text-white tracking-wide">
+              مؤشرات المشتريات والموردين
+            </h2>
+          </div>
+          <button
+            onClick={loadData}
+            className="p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition-colors flex items-center gap-1.5 text-xs font-semibold"
+            title="تحديث البيانات لحظياً"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-sky-400' : ''}`} />
+            <span>تحديث</span>
+          </button>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {/* 1. إجمالي المشتريات هذا الشهر */}
+          <div className="glass-card p-4 rounded-2xl border border-sky-500/20 hover:border-sky-400/40 transition-all flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-400">مشتريات الشهر</span>
+              <div className="w-8 h-8 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400">
+                <Receipt className="w-4 h-4" />
+              </div>
             </div>
-            <div>
-              <h1 className="text-2xl font-black text-white tracking-tight">
-                إدارة الموردين وفواتير المشتريات
-              </h1>
-              <p className="text-xs text-slate-400 mt-1 font-medium">
-                سجل الشركات والموزعين المعتمدين، فواتير التوريد، إرفاق صور الفواتير، ومتابعة الأرصدة الآجلة
+            <div className="mt-2">
+              <p className="text-xl sm:text-2xl font-black text-white font-mono tracking-tight">
+                {summary.thisMonthPurchases.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                <span className="text-[10px] font-normal text-sky-400 mr-1">ج.م</span>
               </p>
+              <div className="flex items-center gap-1 mt-1">
+                {summary.monthDiffPct !== null ? (
+                  <span className={`text-[10px] font-bold ${summary.monthDiffPct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                    {summary.monthDiffPct >= 0 ? `+${summary.monthDiffPct}%` : `${summary.monthDiffPct}%`} عن السابق
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-slate-500 font-medium">الشهر الحالي</span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* 2. إجمالي المبالغ المدفوعة */}
+          <div className="glass-card p-4 rounded-2xl border border-emerald-500/20 hover:border-emerald-400/40 transition-all flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-400">المبالغ المدفوعة</span>
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                <CheckCircle2 className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-2">
+              <p className="text-xl sm:text-2xl font-black text-emerald-400 font-mono tracking-tight">
+                {summary.totalPaid.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                <span className="text-[10px] font-normal mr-1">ج.م</span>
+              </p>
+              <p className="text-[10px] text-slate-500 mt-1 font-medium truncate">مسدد نقداً وبنكياً</p>
+            </div>
+          </div>
+
+          {/* 3. إجمالي المستحق للموردين */}
+          <div className="glass-card p-4 rounded-2xl border border-amber-500/20 hover:border-amber-400/40 transition-all flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-400">مستحق للموردين</span>
+              <div className="w-8 h-8 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                <Clock className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-2">
+              <p className="text-xl sm:text-2xl font-black text-amber-400 font-mono tracking-tight">
+                {summary.totalBalanceDue.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+                <span className="text-[10px] font-normal mr-1">ج.م</span>
+              </p>
+              <p className="text-[10px] text-amber-400/80 mt-1 font-medium truncate">أرصدة آجلة متبقية</p>
+            </div>
+          </div>
+
+          {/* 4. عدد الموردين */}
+          <div className="glass-card p-4 rounded-2xl border border-indigo-500/20 hover:border-indigo-400/40 transition-all flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-400">دليل الموردين</span>
+              <div className="w-8 h-8 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+                <Users className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-2">
+              <p className="text-xl sm:text-2xl font-black text-white font-mono tracking-tight">
+                {summary.totalSuppliersCount}
+                <span className="text-[10px] font-normal text-slate-400 mr-1">مورد</span>
+              </p>
+              <p className="text-[10px] text-slate-500 mt-1 font-medium truncate">شركات وجهات معتمدة</p>
+            </div>
+          </div>
+
+          {/* 5. عدد فواتير المشتريات */}
+          <div className="glass-card p-4 rounded-2xl border border-purple-500/20 hover:border-purple-400/40 transition-all flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-400">فواتير الشراء</span>
+              <div className="w-8 h-8 rounded-xl bg-purple-500/10 border border-purple-500/20 flex items-center justify-center text-purple-400">
+                <FileText className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-2">
+              <p className="text-xl sm:text-2xl font-black text-white font-mono tracking-tight">
+                {summary.totalInvoicesCount}
+                <span className="text-[10px] font-normal text-slate-400 mr-1">فاتورة</span>
+              </p>
+              <p className="text-[10px] text-slate-500 mt-1 font-medium truncate">مسجلة بالكامل</p>
+            </div>
+          </div>
+
+          {/* 6. الفواتير المستحقة والمتأخرة */}
+          <div className="glass-card p-4 rounded-2xl border border-rose-500/20 hover:border-rose-400/40 transition-all flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-400">فواتير متأخرة</span>
+              <div className="w-8 h-8 rounded-xl bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
+                <AlertTriangle className="w-4 h-4" />
+              </div>
+            </div>
+            <div className="mt-2">
+              <p className="text-xl sm:text-2xl font-black text-rose-400 font-mono tracking-tight">
+                {summary.overdueCount}
+                <span className="text-[10px] font-normal text-slate-400 mr-1">/ {summary.unpaidCount} غير مسددة</span>
+              </p>
+              <p className="text-[10px] text-rose-400/80 mt-1 font-medium truncate">تحتاج للمتابعة والسداد</p>
             </div>
           </div>
         </div>
+      </div>
 
-        {/* Tab Buttons & Primary Actions */}
-        <div className="flex items-center gap-2.5">
-          <div className="bg-white/[0.04] border border-white/[0.08] p-1 rounded-2xl flex items-center">
-            <button
-              onClick={() => setActiveTab('invoices')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all ${
-                activeTab === 'invoices'
-                  ? 'bg-white text-slate-950 shadow-md shadow-white/10'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <FileText className="w-4 h-4" />
-              <span>فواتير المشتريات</span>
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
-                activeTab === 'invoices' ? 'bg-slate-950 text-white' : 'bg-white/[0.08] text-slate-300'
-              }`}>
-                {invoices.length}
-              </span>
-            </button>
+      {/* ============================================================== */}
+      {/* 2. NAVIGATION BAR & MAIN ACTIONS                               */}
+      {/* ============================================================== */}
+      <div className="glass-card p-2 rounded-2xl flex flex-wrap items-center justify-between gap-3 border border-slate-800">
+        {/* Tab Buttons */}
+        <div className="flex items-center gap-1.5 p-1 bg-slate-950/60 rounded-xl border border-slate-800">
+          <button
+            onClick={() => setActiveTab('invoices')}
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'invoices'
+                ? 'bg-sky-600 text-white shadow-md shadow-sky-600/30'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+            }`}
+          >
+            <FileText className="w-4 h-4" />
+            <span>فواتير المشتريات</span>
+            <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${activeTab === 'invoices' ? 'bg-sky-700 text-white' : 'bg-slate-800 text-slate-400'}`}>
+              {invoices.length}
+            </span>
+          </button>
 
-            <button
-              onClick={() => setActiveTab('suppliers')}
-              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-black transition-all ${
-                activeTab === 'suppliers'
-                  ? 'bg-white text-slate-950 shadow-md shadow-white/10'
-                  : 'text-slate-400 hover:text-white'
-              }`}
-            >
-              <Building2 className="w-4 h-4" />
-              <span>دليل الموردين</span>
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-black ${
-                activeTab === 'suppliers' ? 'bg-slate-950 text-white' : 'bg-white/[0.08] text-slate-300'
-              }`}>
-                {suppliers.length}
-              </span>
-            </button>
-          </div>
+          <button
+            onClick={() => setActiveTab('suppliers')}
+            className={`px-4 py-2 rounded-lg text-xs font-bold transition-all flex items-center gap-2 cursor-pointer ${
+              activeTab === 'suppliers'
+                ? 'bg-sky-600 text-white shadow-md shadow-sky-600/30'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+            }`}
+          >
+            <Truck className="w-4 h-4" />
+            <span>دليل وحسابات الموردين</span>
+            <span className={`px-1.5 py-0.5 rounded text-[10px] font-mono ${activeTab === 'suppliers' ? 'bg-sky-700 text-white' : 'bg-slate-800 text-slate-400'}`}>
+              {suppliers.length}
+            </span>
+          </button>
+        </div>
 
-          {activeTab === 'invoices' ? (
-            <button
-              onClick={() => setShowCreateInvoiceModal(true)}
-              className="flex items-center gap-2 bg-white hover:bg-slate-100 text-slate-950 px-4 py-2.5 rounded-xl font-black text-xs shadow-lg shadow-white/15 transition-all hover:scale-[1.02] active:scale-95 border border-white cursor-pointer"
-            >
-              <Plus className="w-4 h-4 stroke-[2.5]" />
-              <span>+ فاتورة مشتريات جديدة</span>
-            </button>
-          ) : (
-            <button
-              onClick={() => {
-                setIsEditingSupplier(false);
-                setSupplierFormData({
-                  id: '',
-                  name: '',
-                  contact_person: '',
-                  phone: '',
-                  email: '',
-                  tax_number: '',
-                  address: '',
-                  category: 'قطع غيار',
-                  payment_terms: 'cash',
-                  notes: ''
-                });
-                setShowSupplierModal(true);
-              }}
-              className="flex items-center gap-2 bg-white hover:bg-slate-100 text-slate-950 px-4 py-2.5 rounded-xl font-black text-xs shadow-lg shadow-white/15 transition-all hover:scale-[1.02] active:scale-95 border border-white cursor-pointer"
-            >
-              <Plus className="w-4 h-4 stroke-[2.5]" />
-              <span>+ إضافة مورد جديد</span>
-            </button>
+        {/* Action Buttons */}
+        <div className="flex items-center gap-2">
+          {canManage && (
+            <>
+              <button
+                onClick={handleOpenAddSupplier}
+                className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 hover:border-slate-600 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-sm"
+              >
+                <Plus className="w-4 h-4 text-emerald-400" />
+                <span>إضافة مورد جديد</span>
+              </button>
+
+              <button
+                onClick={handleOpenCreateInvoice}
+                className="px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-lg shadow-sky-600/20"
+              >
+                <Plus className="w-4 h-4" />
+                <span>إضافة فاتورة شراء</span>
+              </button>
+            </>
           )}
         </div>
       </div>
 
-      {/* 2. Top KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Total Purchases */}
-        <div className="glass-card rounded-2xl p-5 shadow-sm relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <div>
-              <span className="text-xs font-bold text-slate-400">إجمالي المشتريات والتوريدات</span>
-              <span className="block text-[11px] font-bold text-sky-400 mt-0.5">
-                {selectedMonth !== 'all' ? `(لشهر: ${formatMonthName(selectedMonth)})` : '(إجمالي كل الشهور)'}
-              </span>
+      {/* ============================================================== */}
+      {/* 3. TAB CONTENT: SUPPLIERS (دليل الموردين)                        */}
+      {/* ============================================================== */}
+      {activeTab === 'suppliers' && (
+        <div className="space-y-4">
+          {/* Search & Filters */}
+          <div className="glass-card p-3 rounded-2xl flex flex-wrap items-center justify-between gap-3 border border-slate-800">
+            {/* Search */}
+            <div className="relative flex-1 min-w-[240px] max-w-md">
+              <Search className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={supplierSearch}
+                onChange={(e) => setSupplierSearch(e.target.value)}
+                placeholder="بحث باسم المورد، اسم الشركة، رقم الهاتف..."
+                className="w-full bg-slate-950/80 border border-slate-800 rounded-xl pr-9 pl-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500"
+              />
             </div>
-            <div className="p-2 bg-sky-500/15 text-sky-300 rounded-xl border border-sky-400/25">
-              <DollarSign className="w-5 h-5 stroke-[2.5]" />
-            </div>
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-3xl font-black text-white tracking-tight">
-              {(activeSummary.total_purchases || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
-            <span className="text-xs font-bold text-slate-400">ج.م</span>
-          </div>
-          <div className="mt-2 text-xs text-slate-400 flex items-center gap-1.5 font-medium">
-            <FileText className="w-3.5 h-3.5 text-sky-400" />
-            <span>عدد الفواتير: {activeSummary.total_invoices}</span>
-          </div>
-        </div>
 
-        {/* Total Paid */}
-        <div className="glass-card border-emerald-500/20 rounded-2xl p-5 shadow-sm relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <div>
-              <span className="text-xs font-bold text-slate-400">المسدد للموردين</span>
-              <span className="block text-[11px] font-bold text-emerald-400 mt-0.5">
-                {selectedMonth !== 'all' ? `(لشهر: ${formatMonthName(selectedMonth)})` : '(إجمالي كل الشهور)'}
-              </span>
-            </div>
-            <div className="p-2 bg-emerald-500/15 text-emerald-300 rounded-xl border border-emerald-400/25">
-              <CheckCircle className="w-5 h-5 stroke-[2.5]" />
-            </div>
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-3xl font-black text-emerald-400 tracking-tight">
-              {(activeSummary.total_paid || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
-            <span className="text-xs font-bold text-emerald-400/70">ج.م</span>
-          </div>
-          <div className="mt-2 text-xs text-emerald-400/90 flex items-center gap-1.5 font-medium">
-            <span>دفعات نقدية وتحويلات مكتملة</span>
-          </div>
-        </div>
-
-        {/* Total Outstanding Dues (الآجل) */}
-        <div className="glass-card border-amber-500/20 rounded-2xl p-5 shadow-sm relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <div>
-              <span className="text-xs font-bold text-amber-300">المتبقي والآجل للموردين (مستحق)</span>
-              <span className="block text-[11px] font-bold text-amber-400 mt-0.5">
-                {selectedMonth !== 'all' ? `(لشهر: ${formatMonthName(selectedMonth)})` : '(إجمالي كل الشهور)'}
-              </span>
-            </div>
-            <div className="p-2 bg-amber-500/15 text-amber-300 rounded-xl border border-amber-400/25">
-              <AlertCircle className="w-5 h-5 stroke-[2.5]" />
-            </div>
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-3xl font-black text-amber-400 tracking-tight">
-              {(activeSummary.total_balance_due || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
-            <span className="text-xs font-bold text-amber-400/70">ج.م</span>
-          </div>
-          <div className="mt-2 text-xs text-amber-400/80 flex items-center gap-1.5 font-medium">
-            <span>مستحقات واجبة السداد للشركات</span>
-          </div>
-        </div>
-
-        {/* Suppliers Count */}
-        <div className="glass-card border-purple-500/20 rounded-2xl p-5 shadow-sm relative overflow-hidden">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-400">الموردون المعتمدون بالدليل</span>
-            <div className="p-2 bg-purple-500/15 text-purple-300 rounded-xl border border-purple-400/25">
-              <Building2 className="w-5 h-5 stroke-[2.5]" />
-            </div>
-          </div>
-          <div className="mt-2 flex items-baseline gap-2">
-            <span className="text-3xl font-black text-purple-300 tracking-tight">
-              {suppliers.length}
-            </span>
-            <span className="text-xs font-bold text-slate-400">مورد مسجل</span>
-          </div>
-          <div className="mt-2 text-xs text-slate-400 flex items-center gap-1.5 font-medium">
-            <span>شامل موزعي الزيوت والقطع واللمبات</span>
-          </div>
-        </div>
-      </div>
-
-      {/* 3. Search & Filters Bar */}
-      <div className="glass-card rounded-2xl p-4 flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-4">
-        {/* Search Input */}
-        <div className="relative w-full lg:w-80">
-          <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder={activeTab === 'invoices' ? 'بحث برقم الفاتورة أو اسم المورد...' : 'بحث باسم المورد أو رقم الهاتف أو المسؤول...'}
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-slate-950/80 border border-slate-800 rounded-xl pr-10 pl-4 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-sky-500 transition-colors"
-          />
-        </div>
-
-        {/* Filters according to active tab */}
-        <div className="flex flex-wrap items-center gap-2">
-          {activeTab === 'invoices' ? (
-            <>
-              {/* Month Selector Dropdown */}
-              <div className="flex items-center gap-1.5 bg-slate-950/90 border border-slate-800 rounded-xl px-3 py-1.5 text-xs shadow-inner">
-                <Calendar className="w-4 h-4 text-sky-400 shrink-0" />
-                <span className="text-slate-400 font-bold whitespace-nowrap">الشهر:</span>
-                <select
-                  value={selectedMonth}
-                  onChange={(e) => setSelectedMonth(e.target.value)}
-                  className="bg-transparent text-white font-bold focus:outline-none cursor-pointer text-xs pr-1"
-                >
-                  <option value="all" className="bg-slate-900 text-white">
-                    كل الشهور (الكل)
-                  </option>
-                  {availableMonths.map((m) => (
-                    <option key={m.value} value={m.value} className="bg-slate-900 text-white">
-                      {m.label} {m.count > 0 ? `(${m.count} فاتورة)` : ''}
-                    </option>
-                  ))}
-                </select>
-                {selectedMonth !== 'all' && (
+            {/* Filter Pills */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              {[
+                { id: 'all', label: 'الكل' },
+                { id: 'paid', label: 'مسدد بالكامل', color: 'emerald' },
+                { id: 'unpaid', label: 'عليه مستحقات', color: 'amber' },
+                { id: 'overdue', label: 'متأخر بالسداد', color: 'rose' }
+              ].map((f) => {
+                const isSel = supplierStatusFilter === f.id;
+                return (
                   <button
-                    type="button"
-                    onClick={() => setSelectedMonth('all')}
-                    className="text-slate-400 hover:text-white p-0.5 cursor-pointer ml-1"
-                    title="إلغاء فلترة الشهر والعودة للكل"
+                    key={f.id}
+                    onClick={() => setSupplierStatusFilter(f.id as any)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      isSel
+                        ? 'bg-slate-800 text-white border border-sky-500/60 shadow-sm'
+                        : 'bg-slate-900/60 text-slate-400 hover:text-slate-200 border border-slate-800/80'
+                    }`}
                   >
-                    <X className="w-3.5 h-3.5" />
+                    {f.label}
                   </button>
-                )}
-              </div>
+                );
+              })}
 
-              {/* Quick Month Shortcuts */}
-              <button
-                type="button"
-                onClick={() => setSelectedMonth(selectedMonth === currentYearMonth ? 'all' : currentYearMonth)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                  selectedMonth === currentYearMonth
-                    ? 'bg-sky-600 text-white shadow-md shadow-sky-600/25'
-                    : 'text-slate-300 hover:text-white bg-slate-900/60 border border-slate-800 hover:bg-slate-800'
-                }`}
-              >
-                الشهر الحالي ({formatMonthName(currentYearMonth).split(' ')[0]})
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setSelectedMonth(selectedMonth === prevYearMonth ? 'all' : prevYearMonth)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                  selectedMonth === prevYearMonth
-                    ? 'bg-sky-600 text-white shadow-md shadow-sky-600/25'
-                    : 'text-slate-300 hover:text-white bg-slate-900/60 border border-slate-800 hover:bg-slate-800'
-                }`}
-              >
-                الشهر السابق ({formatMonthName(prevYearMonth).split(' ')[0]})
-              </button>
-
-              {/* Status Filters */}
-              <div className="flex items-center gap-1 bg-slate-950/80 p-1 rounded-xl border border-slate-800">
-                <button
-                  onClick={() => setInvoiceStatusFilter('all')}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                    invoiceStatusFilter === 'all'
-                      ? 'bg-slate-800 text-white shadow-sm'
-                      : 'text-slate-400 hover:text-white'
-                  }`}
-                >
-                  الكل ({activeSummary.total_invoices})
-                </button>
-                <button
-                  onClick={() => setInvoiceStatusFilter('paid')}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                    invoiceStatusFilter === 'paid'
-                      ? 'bg-emerald-950/80 text-emerald-300 border border-emerald-800'
-                      : 'text-slate-400 hover:text-emerald-400'
-                  }`}
-                >
-                  مسددة
-                </button>
-                <button
-                  onClick={() => setInvoiceStatusFilter('unpaid')}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                    invoiceStatusFilter === 'unpaid'
-                      ? 'bg-amber-950/80 text-amber-300 border border-amber-800'
-                      : 'text-slate-400 hover:text-amber-400'
-                  }`}
-                >
-                  آجلة
-                </button>
-              </div>
-
-              {/* Monthly Breakdown Toggle Button */}
-              <button
-                type="button"
-                onClick={() => setShowMonthlyBreakdown((prev) => !prev)}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-                  showMonthlyBreakdown
-                    ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
-                    : 'bg-purple-950/50 text-purple-300 border border-purple-800/60 hover:bg-purple-900/40'
-                }`}
-                title="عرض جدول مقارنة إجمالي الفواتير والمبالغ لكل شهر"
-              >
-                <Layers className="w-3.5 h-3.5 text-purple-400" />
-                <span>كشف الفواتير بالشهور 📊</span>
-              </button>
-            </>
-          ) : (
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs text-slate-400 ml-1">التصنيف:</span>
+              {/* Category Dropdown */}
               <select
                 value={supplierCategoryFilter}
                 onChange={(e) => setSupplierCategoryFilter(e.target.value)}
-                className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-500"
+                className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-sky-500 cursor-pointer"
               >
-                {SUPPLIER_CATEGORIES.map(cat => (
-                  <option key={cat.id} value={cat.id}>{cat.label}</option>
+                {SUPPLIER_CATEGORIES.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.label}
+                  </option>
                 ))}
               </select>
             </div>
-          )}
-        </div>
-      </div>
-
-      {/* 3.5 Monthly Breakdown Table Section */}
-      {activeTab === 'invoices' && showMonthlyBreakdown && (
-        <div className="glass-card border border-purple-500/30 rounded-2xl p-5 shadow-xl space-y-4 animate-in slide-in-from-top-2 duration-200">
-          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-3 border-b border-white/[0.08]">
-            <div className="flex items-center gap-2.5">
-              <div className="p-2 bg-purple-500/20 text-purple-300 rounded-xl border border-purple-400/30">
-                <Calendar className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="font-black text-sm sm:text-base text-white flex items-center gap-2">
-                  <span>كشف ومقارنة فواتير المشتريات بالشهور</span>
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 font-mono font-bold">
-                    Monthly Purchases Breakdown
-                  </span>
-                </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  ملخص تفصيلي لإجمالي المشتريات والمبالغ المسددة والمتبقية في كل شهر، اضغط على أي شهر لعرض فواتيره فوراً
-                </p>
-              </div>
-            </div>
-
-            <button
-              type="button"
-              onClick={() => setShowMonthlyBreakdown(false)}
-              className="text-slate-400 hover:text-white p-1 cursor-pointer"
-              title="إغلاق كشف الشهور"
-            >
-              <X className="w-5 h-5" />
-            </button>
           </div>
 
-          {monthlyStats.length === 0 ? (
-            <div className="py-8 text-center text-slate-500 text-xs">
-              لا توجد فواتير مشتريات مسجلة حتى الآن لحساب كشف الشهور
-            </div>
-          ) : (
+          {/* Suppliers Table */}
+          <div className="glass-card rounded-2xl overflow-hidden border border-slate-800 shadow-sm">
             <div className="overflow-x-auto">
-              <table className="w-full text-right text-xs sm:text-sm">
-                <thead>
-                  <tr className="bg-slate-950/70 border-b border-slate-800 text-slate-400 text-xs">
-                    <th className="py-2.5 px-4 font-bold">الشهر / السنة</th>
-                    <th className="py-2.5 px-4 font-bold text-center">عدد الفواتير</th>
-                    <th className="py-2.5 px-4 font-bold">إجمالي المشتريات</th>
-                    <th className="py-2.5 px-4 font-bold">المسدد للموردين</th>
-                    <th className="py-2.5 px-4 font-bold">المتبقي (الآجل)</th>
-                    <th className="py-2.5 px-4 font-bold text-center">الإجراء</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/50">
-                  {monthlyStats.map((ms) => {
-                    const isSelected = selectedMonth === ms.month;
-                    return (
-                      <tr
-                        key={ms.month}
-                        className={`transition-colors ${
-                          isSelected ? 'bg-purple-900/30 border-r-4 border-purple-500' : 'hover:bg-slate-800/30'
-                        }`}
-                      >
-                        <td className="py-3 px-4 font-black text-white">
-                          <div className="flex items-center gap-2">
-                            <Calendar className="w-4 h-4 text-purple-400" />
-                            <span>{ms.monthName}</span>
-                            <span className="text-[10px] font-mono text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded">
-                              {ms.month}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="py-3 px-4 text-center font-mono font-bold text-slate-200">
-                          <span className="px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700">
-                            {ms.count} فاتورة
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 font-mono font-black text-sky-400">
-                          {ms.totalPurchases.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م
-                        </td>
-                        <td className="py-3 px-4 font-mono font-bold text-emerald-400">
-                          {ms.totalPaid.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م
-                        </td>
-                        <td className="py-3 px-4 font-mono">
-                          {ms.balanceDue > 0 ? (
-                            <span className="text-amber-400 font-bold">
-                              {ms.balanceDue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م
-                            </span>
-                          ) : (
-                            <span className="text-slate-500 text-xs">0.00 ج.م (مسدد بالكامل)</span>
-                          )}
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setSelectedMonth(isSelected ? 'all' : ms.month);
-                            }}
-                            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
-                              isSelected
-                                ? 'bg-purple-600 text-white shadow-sm'
-                                : 'bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white'
-                            }`}
-                          >
-                            {isSelected ? '✓ معروض حالياً (إلغاء)' : 'عرض فواتير هذا الشهر 🔍'}
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* 4. Tab 1: Purchase Invoices List */}
-      {activeTab === 'invoices' && (
-        <div className="glass-card rounded-2xl overflow-hidden shadow-sm">
-          {loading ? (
-            <div className="py-20 text-center text-slate-500">جاري تحميل فواتير الموردين...</div>
-          ) : filteredInvoices.length === 0 ? (
-            <div className="py-16 text-center">
-              <Truck className="w-12 h-12 text-slate-700 mx-auto mb-3" />
-              <p className="text-slate-400 font-semibold text-base">
-                {selectedMonth !== 'all'
-                  ? `لا توجد فواتير مشتريات مسجلة لشهر (${formatMonthName(selectedMonth)})`
-                  : 'لا توجد فواتير مشتريات مسجلة'}
-              </p>
-              <p className="text-slate-600 text-xs mt-1">
-                {selectedMonth !== 'all'
-                  ? 'يمكنك إلغاء فلتر الشهر أو تسجيل فاتورة جديدة لهذا الشهر وتحديث المخزن'
-                  : 'اضغط على زر "+ فاتورة مشتريات جديدة" لتسجيل فاتورة توريد وإرفاق صورتها وتحديث المخزن'}
-              </p>
-              <div className="mt-4 flex items-center justify-center gap-2">
-                {selectedMonth !== 'all' && (
-                  <button
-                    onClick={() => setSelectedMonth('all')}
-                    className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-bold transition-all"
-                  >
-                    عرض جميع الشهور
-                  </button>
-                )}
-                <button
-                  onClick={() => setShowCreateInvoiceModal(true)}
-                  className="px-4 py-2 bg-emerald-600/90 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all"
-                >
-                  + إضافة فاتورة الآن
-                </button>
-              </div>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-right text-sm">
-                <thead>
-                  <tr className="bg-slate-950/70 border-b border-slate-800/80 text-slate-400 text-xs">
-                    <th className="py-3 px-4 font-bold">رقم الفاتورة</th>
-                    <th className="py-3 px-4 font-bold">المورد</th>
-                    <th className="py-3 px-4 font-bold">التاريخ والشهر</th>
-                    <th className="py-3 px-4 font-bold">عدد الأصناف</th>
-                    <th className="py-3 px-4 font-bold">الإجمالي الشامل (15%)</th>
+              <table className="w-full text-right text-xs">
+                <thead className="bg-slate-950/70 text-slate-400 border-b border-slate-800/80">
+                  <tr>
+                    <th className="py-3 px-4 font-bold">اسم المورد</th>
+                    <th className="py-3 px-4 font-bold">الشركة / المسؤول</th>
+                    <th className="py-3 px-4 font-bold">رقم الهاتف</th>
+                    <th className="py-3 px-4 font-bold">البريد الإلكتروني</th>
+                    <th className="py-3 px-4 font-bold text-center">الفواتير</th>
+                    <th className="py-3 px-4 font-bold">إجمالي المشتريات</th>
                     <th className="py-3 px-4 font-bold">المدفوع</th>
-                    <th className="py-3 px-4 font-bold">المتبقي (الآجل)</th>
-                    <th className="py-3 px-4 font-bold">الحالة</th>
+                    <th className="py-3 px-4 font-bold">الرصيد المتبقي</th>
+                    <th className="py-3 px-4 font-bold">آخر تعامل</th>
+                    <th className="py-3 px-4 font-bold text-center">حالة الحساب</th>
                     <th className="py-3 px-4 font-bold text-center">الإجراءات</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-800/50">
-                  {filteredInvoices.map((inv) => (
-                    <tr key={inv.id} className="hover:bg-slate-800/30 transition-colors">
-                      <td className="py-3 px-4 font-mono font-bold text-sky-400">
-                        <div className="flex items-center gap-2">
-                          <span>{inv.invoice_number}</span>
-                          {inv.invoice_image_url && (
+                <tbody className="divide-y divide-slate-800/60">
+                  {filteredSuppliers.length > 0 ? (
+                    filteredSuppliers.map((s) => {
+                      const balance = Number(s.balance_due || 0);
+                      const isOverdue = (s.overdue_count || 0) > 0;
+                      let badge = {
+                        label: 'مسدد بالكامل ✓',
+                        cls: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                      };
+                      if (isOverdue) {
+                        badge = {
+                          label: 'متأخر بالسداد ⚠️',
+                          cls: 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                        };
+                      } else if (balance > 0) {
+                        badge = {
+                          label: 'عليه مستحقات ⏳',
+                          cls: 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                        };
+                      }
+
+                      return (
+                        <tr key={s.id} className="hover:bg-slate-800/40 transition-colors">
+                          {/* Name */}
+                          <td className="py-3 px-4 font-bold text-white">
                             <button
-                              type="button"
-                              onClick={() => setPreviewImage(inv.invoice_image_url!)}
-                              className="p-1 text-emerald-400 hover:text-white bg-emerald-950/60 border border-emerald-800/60 rounded-md transition-colors"
-                              title="عرض صورة الفاتورة المرفقة"
+                              onClick={() => handleOpenSupplierDetails(s, 'invoices')}
+                              className="text-right hover:text-sky-400 transition-colors cursor-pointer flex items-center gap-1.5"
                             >
-                              <Paperclip className="w-3.5 h-3.5" />
+                              <Truck className="w-3.5 h-3.5 text-sky-400 shrink-0" />
+                              <span>{s.name}</span>
                             </button>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 font-semibold text-white">
-                        <div className="flex flex-col">
-                          <span>{inv.supplier_name}</span>
-                          {inv.supplier_phone && (
-                            <span className="text-xs text-slate-500 font-mono" dir="ltr">
-                              {inv.supplier_phone}
+                          </td>
+
+                          {/* Contact Person */}
+                          <td className="py-3 px-4 text-slate-300">
+                            {s.contact_person || '—'}
+                          </td>
+
+                          {/* Phone */}
+                          <td className="py-3 px-4 font-mono text-slate-300" dir="ltr">
+                            {s.phone || '—'}
+                          </td>
+
+                          {/* Email */}
+                          <td className="py-3 px-4 font-mono text-slate-400 text-[11px]" dir="ltr">
+                            {s.email || '—'}
+                          </td>
+
+                          {/* Invoices Count */}
+                          <td className="py-3 px-4 text-center">
+                            <span className="px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 font-mono font-bold text-slate-200">
+                              {s.invoice_count || 0}
                             </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-xs">
-                        <div className="flex flex-col gap-0.5">
-                          <span className="font-mono text-slate-300 font-bold">{inv.invoice_date}</span>
-                          <span className="text-[11px] text-purple-300/90 bg-purple-950/50 border border-purple-800/40 rounded px-1.5 py-0.5 inline-block w-fit">
-                            {formatMonthName(inv.invoice_date.substring(0, 7))}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="py-3 px-4 text-xs text-slate-300">
-                        <span className="px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700">
-                          {inv.items_count || 1} أصناف
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 font-bold text-white font-mono">
-                        {Number(inv.grand_total).toFixed(2)} ج.م
-                      </td>
-                      <td className="py-3 px-4 font-bold text-emerald-400 font-mono">
-                        {Number(inv.paid_amount).toFixed(2)} ج.م
-                      </td>
-                      <td className="py-3 px-4 font-mono">
-                        {inv.balance_due > 0 ? (
-                          <span className="text-amber-400 font-bold">
-                            {Number(inv.balance_due).toFixed(2)} ج.م
-                          </span>
-                        ) : (
-                          <span className="text-slate-500 text-xs">0.00 ج.م</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4">
-                        {inv.payment_status === 'paid' ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-950/60 text-emerald-400 border border-emerald-800/60">
-                            <CheckCircle className="w-3 h-3" />
-                            مسددة بالكامل
-                          </span>
-                        ) : inv.paid_amount > 0 ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-950/60 text-amber-400 border border-amber-800/60">
-                            <Clock className="w-3 h-3" />
-                            مسددة جزئياً
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-950/60 text-rose-400 border border-rose-800/60">
-                            <AlertCircle className="w-3 h-3" />
-                            آجلة / غير مسددة
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4 text-center">
-                        <div className="flex items-center justify-center gap-1.5">
-                          <button
-                            onClick={() => handleViewInvoiceDetails(inv)}
-                            className="p-1.5 text-slate-400 hover:text-sky-400 hover:bg-sky-950/40 rounded-lg transition-colors"
-                            title="عرض تفاصيل الفاتورة"
-                          >
-                            <FileText className="w-4 h-4" />
-                          </button>
+                          </td>
 
-                          {inv.invoice_image_url && (
-                            <button
-                              onClick={() => setPreviewImage(inv.invoice_image_url!)}
-                              className="p-1.5 text-emerald-400 hover:text-white hover:bg-emerald-950/40 rounded-lg transition-colors"
-                              title="معاينة صورة الفاتورة"
-                            >
-                              <ImageIcon className="w-4 h-4" />
-                            </button>
-                          )}
+                          {/* Total Purchases */}
+                          <td className="py-3 px-4 font-mono font-bold text-slate-200">
+                            {Number(s.total_purchases || 0).toLocaleString()} ج.م
+                          </td>
 
-                          {inv.balance_due > 0 && (
-                            <button
-                              onClick={() => handleOpenPaymentModal('invoice', inv)}
-                              className="px-2 py-1 text-xs font-bold bg-emerald-600/20 hover:bg-emerald-600/40 text-emerald-400 border border-emerald-700/50 rounded-lg transition-colors"
-                              title="سداد دفعة من الفاتورة"
-                            >
-                              سداد دفعة
-                            </button>
-                          )}
+                          {/* Total Paid */}
+                          <td className="py-3 px-4 font-mono font-bold text-emerald-400">
+                            {Number(s.total_paid || 0).toLocaleString()} ج.م
+                          </td>
 
-                          <button
-                            onClick={() => handleDeleteInvoice(inv)}
-                            className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-950/40 rounded-lg transition-colors"
-                            title="حذف الفاتورة"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
+                          {/* Balance Due */}
+                          <td className="py-3 px-4 font-mono font-black">
+                            <span className={balance > 0 ? (isOverdue ? 'text-rose-400' : 'text-amber-400') : 'text-emerald-400'}>
+                              {balance.toLocaleString()} ج.م
+                            </span>
+                          </td>
+
+                          {/* Last Transaction */}
+                          <td className="py-3 px-4 text-slate-400 font-mono text-[11px]">
+                            {s.last_invoice_date || s.last_payment_date || '—'}
+                          </td>
+
+                          {/* Status Badge */}
+                          <td className="py-3 px-4 text-center">
+                            <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold inline-block ${badge.cls}`}>
+                              {badge.label}
+                            </span>
+                          </td>
+
+                          {/* Actions */}
+                          <td className="py-3 px-4 text-center">
+                            <div className="flex items-center justify-center gap-1.5">
+                              {/* Open Details / Ledger */}
+                              <button
+                                onClick={() => handleOpenSupplierDetails(s, 'ledger')}
+                                className="p-1.5 bg-slate-800 hover:bg-sky-600/20 hover:text-sky-400 text-slate-300 rounded-lg transition-colors cursor-pointer"
+                                title="عرض كشف الحساب والملف الشامل"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                              </button>
+
+                              {/* Pay Balance */}
+                              {canManage && balance > 0 && (
+                                <button
+                                  onClick={() => handleOpenPayment({ type: 'supplier', supplier: s })}
+                                  className="p-1.5 bg-amber-500/10 hover:bg-amber-500 text-amber-400 hover:text-white rounded-lg transition-colors border border-amber-500/20 cursor-pointer"
+                                  title="تسجيل دفعة سداد للمورد"
+                                >
+                                  <CreditCard className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+
+                              {/* Edit */}
+                              {canManage && (
+                                <button
+                                  onClick={() => handleOpenEditSupplier(s)}
+                                  className="p-1.5 bg-slate-800 hover:bg-amber-600/20 hover:text-amber-400 text-slate-300 rounded-lg transition-colors cursor-pointer"
+                                  title="تعديل بيانات المورد"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+
+                              {/* Delete */}
+                              {canDelete && (
+                                <button
+                                  onClick={() => handleDeleteSupplier(s.id, s.name)}
+                                  className="p-1.5 bg-slate-800 hover:bg-rose-600/20 hover:text-rose-400 text-slate-400 rounded-lg transition-colors cursor-pointer"
+                                  title="حذف المورد"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={11} className="py-12 text-center text-slate-500">
+                        <Truck className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                        <p className="font-semibold text-sm">لا يوجد موردين مطابقين لمعايير البحث</p>
                       </td>
                     </tr>
-                  ))}
+                  )}
                 </tbody>
               </table>
             </div>
-          )}
-        </div>
-      )}
-
-      {/* 5. Tab 2: Suppliers Directory */}
-      {activeTab === 'suppliers' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {loading ? (
-            <div className="col-span-full py-20 text-center text-slate-500">جاري تحميل دليل الموردين...</div>
-          ) : filteredSuppliers.length === 0 ? (
-            <div className="col-span-full py-16 text-center bg-slate-900/40 border border-slate-800 rounded-2xl">
-              <Building2 className="w-12 h-12 text-slate-700 mx-auto mb-3" />
-              <p className="text-slate-400 font-semibold text-base">لا يوجد موردون مطابقون للبحث</p>
-              <button
-                onClick={() => {
-                  setIsEditingSupplier(false);
-                  setSupplierFormData({
-                    id: '',
-                    name: '',
-                    contact_person: '',
-                    phone: '',
-                    email: '',
-                    tax_number: '',
-                    address: '',
-                    category: 'قطع غيار',
-                    payment_terms: 'cash',
-                    notes: ''
-                  });
-                  setShowSupplierModal(true);
-                }}
-                className="mt-4 px-4 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-bold transition-all"
-              >
-                + إضافة مورد جديد الآن
-              </button>
-            </div>
-          ) : (
-            filteredSuppliers.map((sup) => (
-              <div
-                key={sup.id}
-                className="glass-card rounded-2xl p-5 flex flex-col justify-between transition-all shadow-sm"
-              >
-                <div>
-                  {/* Header: Name & Category badge */}
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <h3 className="text-base font-bold text-white flex items-center gap-2">
-                        <span>{sup.name}</span>
-                      </h3>
-                      {sup.contact_person && (
-                        <p className="text-xs text-slate-400 mt-0.5">
-                          المسؤول: <span className="text-slate-300 font-medium">{sup.contact_person}</span>
-                        </p>
-                      )}
-                    </div>
-                    <span className="px-2.5 py-1 rounded-lg text-xs font-bold bg-sky-950/60 text-sky-400 border border-sky-800/60">
-                      {sup.category || 'قطع غيار'}
-                    </span>
-                  </div>
-
-                  {/* Contact Info */}
-                  <div className="mt-4 space-y-1.5 text-xs text-slate-400">
-                    {sup.phone && (
-                      <div className="flex items-center gap-2">
-                        <Phone className="w-3.5 h-3.5 text-slate-500" />
-                        <span className="font-mono" dir="ltr">{sup.phone}</span>
-                      </div>
-                    )}
-                    {sup.address && (
-                      <div className="flex items-center gap-2">
-                        <MapPin className="w-3.5 h-3.5 text-slate-500" />
-                        <span>{sup.address}</span>
-                      </div>
-                    )}
-                    {sup.tax_number && (
-                      <div className="flex items-center gap-2">
-                        <FileText className="w-3.5 h-3.5 text-slate-500" />
-                        <span>الرقم الضريبي: <span className="font-mono text-slate-300">{sup.tax_number}</span></span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Financial Counters */}
-                  <div className="mt-4 grid grid-cols-2 gap-2 p-3 bg-slate-950/70 border border-slate-800/80 rounded-xl text-center">
-                    <div>
-                      <span className="text-[10px] text-slate-400 block">إجمالي المسحوبات</span>
-                      <span className="text-xs font-black text-white font-mono">
-                        {Number(sup.total_purchases || 0).toFixed(0)} ج.م
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-amber-400 block">الرصيد الآجل المستحق</span>
-                      <span className="text-xs font-black text-amber-400 font-mono">
-                        {Number(sup.balance_due || 0).toFixed(0)} ج.م
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Footer Actions */}
-                <div className="mt-5 pt-3 border-t border-slate-800/80 flex items-center justify-between gap-2">
-                  <button
-                    onClick={() => handleViewSupplierLedger(sup)}
-                    className="flex-1 py-1.5 px-3 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl transition-all flex items-center justify-center gap-1.5"
-                  >
-                    <FileText className="w-3.5 h-3.5 text-sky-400" />
-                    <span>كشف الحساب</span>
-                  </button>
-
-                  {Number(sup.balance_due || 0) > 0 && (
-                    <button
-                      onClick={() => handleOpenPaymentModal('supplier', sup)}
-                      className="py-1.5 px-3 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border border-emerald-700/50 text-xs font-bold rounded-xl transition-all flex items-center gap-1"
-                    >
-                      <CreditCard className="w-3.5 h-3.5" />
-                      <span>سداد دفعة</span>
-                    </button>
-                  )}
-
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => {
-                        setIsEditingSupplier(true);
-                        setSupplierFormData({
-                          id: sup.id,
-                          name: sup.name,
-                          contact_person: sup.contact_person || '',
-                          phone: sup.phone || '',
-                          email: sup.email || '',
-                          tax_number: sup.tax_number || '',
-                          address: sup.address || '',
-                          category: sup.category || 'قطع غيار',
-                          payment_terms: sup.payment_terms || 'cash',
-                          notes: sup.notes || ''
-                        });
-                        setShowSupplierModal(true);
-                      }}
-                      className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
-                      title="تعديل بيانات المورد"
-                    >
-                      <Edit2 className="w-3.5 h-3.5" />
-                    </button>
-
-                    <button
-                      onClick={() => handleDeleteSupplier(sup)}
-                      className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-950/40 rounded-lg transition-colors"
-                      title="حذف المورد"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      )}
-
-      {/* ======================================================== */}
-      {/* 6. MODAL: + فاتورة مشتريات جديدة                         */}
-      {/* ======================================================== */}
-      {showCreateInvoiceModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col shadow-2xl overflow-hidden my-4">
-            {/* Modal Header */}
-            <div className="p-5 border-b border-slate-800 flex items-center justify-between bg-slate-950/50">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-lg">
-                  <FileText className="w-5 h-5" />
-                </div>
-                <div>
-                  <h2 className="text-lg font-bold text-white">تسجيل فاتورة مشتريات وتوريد أصناف</h2>
-                  <p className="text-xs text-slate-400">تحديث كميات المخزن تلقائياً، إرفاق صورة الفاتورة، وحفظها بقاعدة البيانات</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowCreateInvoiceModal(false)}
-                className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition-colors"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <form onSubmit={handleCreateInvoiceSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
-              {/* Supplier & Invoice Header (Row 1: Supplier, Phone, Attachment) */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 bg-slate-950/60 border border-slate-800 rounded-xl">
-                {/* 1. Supplier Picker / Input */}
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-300">
-                    المورد <span className="text-rose-500">*</span>
-                  </label>
-                  <select
-                    value={invoiceFormData.supplier_id}
-                    onChange={(e) => handleSelectSupplierForInvoice(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-sky-500"
-                  >
-                    <option value="">-- اختر من دليل الموردين أو اكتب يدوياً --</option>
-                    {suppliers.map(s => (
-                      <option key={s.id} value={s.id}>{s.name} ({s.category})</option>
-                    ))}
-                  </select>
-                  {!invoiceFormData.supplier_id && (
-                    <input
-                      type="text"
-                      placeholder="أو اكتب اسم مورد جديد هنا..."
-                      value={invoiceFormData.supplier_name}
-                      onChange={(e) => setInvoiceFormData(prev => ({ ...prev, supplier_name: e.target.value }))}
-                      className="mt-2 w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-500"
-                    />
-                  )}
-                </div>
-
-                {/* 2. Supplier Phone */}
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-300">هاتف المورد</label>
-                  <input
-                    type="text"
-                    placeholder="05XXXXXXXX"
-                    value={invoiceFormData.supplier_phone}
-                    onChange={(e) => setInvoiceFormData(prev => ({ ...prev, supplier_phone: e.target.value }))}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-sky-500 font-mono"
-                    dir="ltr"
-                  />
-                </div>
-
-                {/* 3. Attach Invoice Image / PDF (replaces supplier tax number) */}
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-300 flex items-center justify-between">
-                    <span className="flex items-center gap-1 text-sky-400">
-                      <Camera className="w-3.5 h-3.5" />
-                      <span>إرفاق صورة الفاتورة</span>
-                    </span>
-                    {invoiceFormData.invoice_image_url && (
-                      <span className="text-[10px] text-emerald-400 font-bold">تم الإرفاق ✓</span>
-                    )}
-                  </label>
-
-                  {invoiceFormData.invoice_image_url ? (
-                    <div className="flex items-center justify-between gap-2 p-1.5 bg-slate-900 border border-emerald-500/40 rounded-xl">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <img
-                          src={invoiceFormData.invoice_image_url}
-                          alt="صورة الفاتورة"
-                          className="w-8 h-8 rounded-lg object-cover border border-slate-700 cursor-pointer"
-                          onClick={() => setPreviewImage(invoiceFormData.invoice_image_url)}
-                        />
-                        <div className="min-w-0">
-                          <p className="text-[11px] text-emerald-300 font-semibold truncate">تم حفظ الصورة</p>
-                          <button
-                            type="button"
-                            onClick={() => setPreviewImage(invoiceFormData.invoice_image_url)}
-                            className="text-[10px] text-sky-400 hover:underline flex items-center gap-0.5"
-                          >
-                            <Eye className="w-3 h-3" /> معاينة
-                          </button>
-                        </div>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => setInvoiceFormData(prev => ({ ...prev, invoice_image_url: '' }))}
-                        className="p-1 text-slate-400 hover:text-rose-400 hover:bg-rose-950/40 rounded-lg transition-colors"
-                        title="إزالة الصورة"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ) : (
-                    <label className={`flex items-center justify-center gap-2 p-2 border border-dashed rounded-xl cursor-pointer transition-all ${
-                      uploadingImage
-                        ? 'border-sky-500/50 bg-sky-950/20 text-sky-400'
-                        : 'border-slate-700 hover:border-sky-500/60 bg-slate-900/90 hover:bg-slate-900 text-slate-300'
-                    }`}>
-                      <input
-                        type="file"
-                        accept="image/*,application/pdf"
-                        capture="environment"
-                        onChange={handleInvoiceImageUpload}
-                        className="hidden"
-                        disabled={uploadingImage}
-                      />
-                      {uploadingImage ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin text-sky-400" />
-                          <span className="text-xs font-semibold">جاري الرفع...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Upload className="w-4 h-4 text-sky-400" />
-                          <span className="text-xs font-semibold">ارفق صورة أو التقط بالكاميرا</span>
-                        </>
-                      )}
-                    </label>
-                  )}
-                </div>
-
-                {/* 4. Invoice Number */}
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-300">رقم الفاتورة (الورقية / المورد)</label>
-                  <input
-                    type="text"
-                    placeholder="مثال: INV-10492"
-                    value={invoiceFormData.invoice_number}
-                    onChange={(e) => setInvoiceFormData(prev => ({ ...prev, invoice_number: e.target.value }))}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-sky-500 font-mono"
-                  />
-                </div>
-
-                {/* 5. Invoice Date */}
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-300">تاريخ الفاتورة</label>
-                  <input
-                    type="date"
-                    value={invoiceFormData.invoice_date}
-                    onChange={(e) => setInvoiceFormData(prev => ({ ...prev, invoice_date: e.target.value }))}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-sky-500 font-mono"
-                  />
-                </div>
-
-                {/* 6. Payment Method */}
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-300">طريقة السداد</label>
-                  <select
-                    value={invoiceFormData.payment_method}
-                    onChange={(e) => setInvoiceFormData(prev => ({ ...prev, payment_method: e.target.value }))}
-                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-sky-500"
-                  >
-                    <option value="cash">نقداً (كاش من الخزينة)</option>
-                    <option value="transfer">تحويل بنكي</option>
-                    <option value="card">بطاقة / مدى</option>
-                    <option value="credit">آجل بالكامل (سداد لاحق)</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Items Section */}
-              <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
-                    <Package className="w-4 h-4 text-emerald-400" />
-                    <span>أصناف وقطع الفاتورة المستلمة</span>
-                  </h3>
-                  <button
-                    type="button"
-                    onClick={handleAddItemToInvoice}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-sky-600/30 hover:bg-sky-600/50 text-sky-300 border border-sky-600/40 rounded-xl text-xs font-bold transition-all"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>+ إضافة صنف آخر</span>
-                  </button>
-                </div>
-
-                <div className="space-y-3">
-                  {invoiceFormData.items.map((item, idx) => (
-                    <div
-                      key={idx}
-                      className="p-3.5 bg-slate-950/70 border border-slate-800 rounded-xl space-y-3 transition-colors hover:border-slate-700"
-                    >
-                      <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
-                        {/* Select from Inventory */}
-                        <div className="md:col-span-4 space-y-1">
-                          <label className="text-[11px] font-semibold text-slate-400">
-                            اختر صنفاً من المخزن:
-                          </label>
-                          <select
-                            value={item.part_id}
-                            onChange={(e) => handleUpdateItem(idx, 'part_id', e.target.value)}
-                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-500"
-                          >
-                            <option value="">-- أو تكويد صنف جديد بالأسفل --</option>
-                            {inventoryParts.map(p => (
-                              <option key={p.id} value={p.id}>
-                                {p.name} ({p.part_number}) — رصيد حالي: {p.stock_quantity}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-
-                        {/* Item Name */}
-                        <div className="md:col-span-3 space-y-1">
-                          <label className="text-[11px] font-semibold text-slate-400">
-                            اسم الصنف <span className="text-rose-500">*</span>:
-                          </label>
-                          <input
-                            type="text"
-                            placeholder="اسم الزيت / اللمبة / القطعة..."
-                            value={item.item_name}
-                            onChange={(e) => handleUpdateItem(idx, 'item_name', e.target.value)}
-                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-500"
-                          />
-                        </div>
-
-                        {/* Quantity */}
-                        <div className="md:col-span-2 space-y-1">
-                          <label className="text-[11px] font-semibold text-slate-400">الكمية:</label>
-                          <input
-                            type="number"
-                            min="1"
-                            value={item.quantity}
-                            onChange={(e) => handleUpdateItem(idx, 'quantity', parseInt(e.target.value) || 1)}
-                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-500 font-mono text-center"
-                          />
-                        </div>
-
-                        {/* Unit Cost */}
-                        <div className="md:col-span-2 space-y-1">
-                          <label className="text-[11px] font-semibold text-slate-400">سعر الشراء:</label>
-                          <input
-                            type="number"
-                            step="0.01"
-                            min="0"
-                            placeholder="0.00"
-                            value={item.unit_cost}
-                            onChange={(e) => handleUpdateItem(idx, 'unit_cost', parseFloat(e.target.value) || 0)}
-                            className="w-full bg-slate-900 border border-slate-700 rounded-lg px-2.5 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-500 font-mono text-center"
-                          />
-                        </div>
-
-                        {/* Remove Button */}
-                        <div className="md:col-span-1 flex items-end justify-center">
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveItemFromInvoice(idx)}
-                            disabled={invoiceFormData.items.length === 1}
-                            className={`p-2 rounded-lg transition-colors ${
-                              invoiceFormData.items.length === 1
-                                ? 'text-slate-700 cursor-not-allowed'
-                                : 'text-slate-400 hover:text-rose-400 hover:bg-rose-950/40'
-                            }`}
-                            title="حذف البند"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* If creating new part (toggle details) */}
-                      {!item.part_id && (
-                        <div className="pt-2 border-t border-slate-800/60 grid grid-cols-1 md:grid-cols-4 gap-2 text-xs">
-                          <label className="flex items-center gap-1.5 text-sky-400 font-semibold cursor-pointer">
-                            <input
-                              type="checkbox"
-                              checked={item.is_new_part}
-                              onChange={(e) => handleUpdateItem(idx, 'is_new_part', e.target.checked)}
-                              className="rounded border-slate-700 bg-slate-900 text-sky-600 focus:ring-0"
-                            />
-                            <span>تكويد وإضافة للمخزن تلقائياً</span>
-                          </label>
-
-                          {item.is_new_part && (
-                            <>
-                              <div>
-                                <input
-                                  type="text"
-                                  placeholder="كود القطعة (Part Number)"
-                                  value={item.part_number}
-                                  onChange={(e) => handleUpdateItem(idx, 'part_number', e.target.value)}
-                                  className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 font-mono"
-                                />
-                              </div>
-                              <div>
-                                <select
-                                  value={item.category}
-                                  onChange={(e) => handleUpdateItem(idx, 'category', e.target.value)}
-                                  className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200"
-                                >
-                                  <option value="قطع غيار">قطع غيار</option>
-                                  <option value="زيوت وسوائل">زيوت وسوائل</option>
-                                  <option value="لمبات وإضاءة">لمبات وإضاءة</option>
-                                  <option value="فلاتر">فلاتر</option>
-                                  <option value="فرامل">فرامل</option>
-                                  <option value="كهرباء وبواجي">كهرباء وبواجي</option>
-                                </select>
-                              </div>
-                              <div>
-                                <input
-                                  type="number"
-                                  placeholder="سعر البيع للعميل"
-                                  value={item.sale_price || ''}
-                                  onChange={(e) => handleUpdateItem(idx, 'sale_price', parseFloat(e.target.value) || 0)}
-                                  className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 font-mono"
-                                />
-                              </div>
-                            </>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Line Item Total */}
-                      <div className="flex justify-end text-xs text-slate-400 font-mono">
-                        إجمالي البند: <span className="text-white font-bold mr-1">{(item.quantity * item.unit_cost).toFixed(2)} ج.م</span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Financial Calculation Footer */}
-              <div className="p-4 bg-slate-950/80 border border-slate-800 rounded-xl space-y-3">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
-                  <div>
-                    <span className="text-xs text-slate-400 block">المجموع قبل الضريبة</span>
-                    <span className="text-sm font-bold text-white font-mono">{invoiceSubtotal.toFixed(2)} ج.م</span>
-                  </div>
-                  <div>
-                    <span className="text-xs text-slate-400 block">ضريبة القيمة المضافة (15%)</span>
-                    <span className="text-sm font-bold text-sky-400 font-mono">{invoiceTaxAmount.toFixed(2)} ج.م</span>
-                  </div>
-                  <div>
-                    <span className="text-xs text-slate-400 block">الإجمالي الشامل للضريبة</span>
-                    <span className="text-base font-black text-emerald-400 font-mono">{invoiceGrandTotal.toFixed(2)} ج.م</span>
-                  </div>
-                  <div>
-                    <span className="text-xs text-amber-400 block">الرصيد الآجل المتبقي</span>
-                    <span className="text-base font-black text-amber-400 font-mono">{invoiceBalanceDue.toFixed(2)} ج.م</span>
-                  </div>
-                </div>
-
-                <div className="pt-3 border-t border-slate-800/80 flex flex-col md:flex-row items-center gap-4">
-                  <div className="w-full md:w-1/2 space-y-1">
-                    <label className="text-xs font-bold text-emerald-400">
-                      المبلغ المدفوع كاش/تحويل الآن:
-                    </label>
-                    <input
-                      type="number"
-                      step="0.01"
-                      min="0"
-                      max={invoiceGrandTotal}
-                      value={invoiceFormData.paid_amount}
-                      onChange={(e) => setInvoiceFormData(prev => ({ ...prev, paid_amount: parseFloat(e.target.value) || 0 }))}
-                      className="w-full bg-slate-900 border border-emerald-700/60 rounded-xl px-3 py-2 text-sm text-emerald-300 font-mono font-bold focus:outline-none"
-                    />
-                  </div>
-
-                  <div className="w-full md:w-1/2 space-y-1">
-                    <label className="text-xs font-bold text-slate-400">ملاحظات الفاتورة:</label>
-                    <input
-                      type="text"
-                      placeholder="أي شروط أو تفاصيل إضافية..."
-                      value={invoiceFormData.notes}
-                      onChange={(e) => setInvoiceFormData(prev => ({ ...prev, notes: e.target.value }))}
-                      className="w-full bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Submit Buttons */}
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setShowCreateInvoiceModal(false)}
-                  className="px-5 py-2.5 rounded-xl border border-slate-700 text-slate-300 hover:bg-slate-800 text-sm font-bold transition-all"
-                >
-                  إلغاء
-                </button>
-                <button
-                  type="submit"
-                  className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-sm font-bold shadow-lg shadow-emerald-900/30 transition-all flex items-center gap-2"
-                >
-                  <Check className="w-4 h-4" />
-                  <span>حفظ الفاتورة وتحديث المخزون</span>
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}
 
-      {/* ======================================================== */}
-      {/* 7. MODAL: تفاصيل الفاتورة والطباعة                       */}
-      {/* ======================================================== */}
-      {showInvoiceDetailsModal && selectedInvoice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden my-4 print:bg-white print:text-black">
+      {/* ============================================================== */}
+      {/* 4. TAB CONTENT: PURCHASE INVOICES (فواتير المشتريات)            */}
+      {/* ============================================================== */}
+      {activeTab === 'invoices' && (
+        <div className="space-y-4">
+          {/* Search & Filters */}
+          <div className="glass-card p-3 rounded-2xl flex flex-wrap items-center justify-between gap-3 border border-slate-800">
+            {/* Search */}
+            <div className="relative flex-1 min-w-[240px] max-w-md">
+              <Search className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={invoiceSearch}
+                onChange={(e) => setInvoiceSearch(e.target.value)}
+                placeholder="بحث برقم الفاتورة، اسم المورد، هاتف المورد..."
+                className="w-full bg-slate-950/80 border border-slate-800 rounded-xl pr-9 pl-4 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500"
+              />
+            </div>
+
+            {/* Filter Dropdowns & Pills */}
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Supplier Filter */}
+              <select
+                value={invoiceSupplierFilter}
+                onChange={(e) => setInvoiceSupplierFilter(e.target.value)}
+                className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-sky-500 cursor-pointer max-w-[150px] truncate"
+              >
+                <option value="all">كل الموردين</option>
+                {suppliers.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+
+              {/* Status Filter */}
+              <select
+                value={invoiceStatusFilter}
+                onChange={(e) => setInvoiceStatusFilter(e.target.value as any)}
+                className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-sky-500 cursor-pointer"
+              >
+                <option value="all">جميع الحالات</option>
+                <option value="paid">مدفوعة بالكامل</option>
+                <option value="partially_paid">مدفوعة جزئياً</option>
+                <option value="unpaid">غير مدفوعة</option>
+                <option value="overdue">متأخرة السداد</option>
+              </select>
+
+              {/* Payment Method Filter */}
+              <select
+                value={invoicePaymentMethodFilter}
+                onChange={(e) => setInvoicePaymentMethodFilter(e.target.value)}
+                className="bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 focus:outline-none focus:border-sky-500 cursor-pointer"
+              >
+                {PAYMENT_METHODS.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Invoices Table */}
+          <div className="glass-card rounded-2xl overflow-hidden border border-slate-800 shadow-sm">
+            <div className="overflow-x-auto">
+              <table className="w-full text-right text-xs">
+                <thead className="bg-slate-950/70 text-slate-400 border-b border-slate-800/80">
+                  <tr>
+                    <th className="py-3 px-4 font-bold">رقم الفاتورة</th>
+                    <th className="py-3 px-4 font-bold">المورد</th>
+                    <th className="py-3 px-4 font-bold">التاريخ</th>
+                    <th className="py-3 px-4 font-bold text-center">الأصناف</th>
+                    <th className="py-3 px-4 font-bold">إجمالي الفاتورة</th>
+                    <th className="py-3 px-4 font-bold">المدفوع</th>
+                    <th className="py-3 px-4 font-bold">المتبقي</th>
+                    <th className="py-3 px-4 font-bold">طريقة الدفع</th>
+                    <th className="py-3 px-4 font-bold text-center">الحالة</th>
+                    <th className="py-3 px-4 font-bold">المستخدم</th>
+                    <th className="py-3 px-4 font-bold text-center">الإجراءات</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {filteredInvoices.length > 0 ? (
+                    filteredInvoices.map((inv) => {
+                      const balance = Number(inv.balance_due || 0);
+                      const isOverdue = balance > 0 && inv.due_date && inv.due_date < todayStr;
+                      let badge = {
+                        label: 'مدفوعة بالكامل ✓',
+                        cls: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                      };
+                      if (isOverdue) {
+                        badge = {
+                          label: 'متأخرة ⚠️',
+                          cls: 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                        };
+                      } else if (inv.payment_status === 'partially_paid' || (Number(inv.paid_amount) > 0 && balance > 0)) {
+                        badge = {
+                          label: 'مدفوعة جزئياً',
+                          cls: 'bg-sky-500/15 text-sky-400 border border-sky-500/30'
+                        };
+                      } else if (balance > 0) {
+                        badge = {
+                          label: 'غير مدفوعة',
+                          cls: 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
+                        };
+                      }
+
+                      const methodMap: Record<string, string> = {
+                        cash: 'نقدي',
+                        transfer: 'تحويل بنكي',
+                        card: 'بطاقة',
+                        credit: 'آجل'
+                      };
+
+                      return (
+                        <tr key={inv.id} className="hover:bg-slate-800/40 transition-colors">
+                          {/* Invoice Number */}
+                          <td className="py-3 px-4 font-mono font-bold text-sky-400">
+                            <button
+                              onClick={() => handleOpenInvoiceDetails(inv)}
+                              className="hover:underline cursor-pointer flex items-center gap-1"
+                            >
+                              <FileText className="w-3.5 h-3.5" />
+                              <span>{inv.invoice_number}</span>
+                            </button>
+                          </td>
+
+                          {/* Supplier Name */}
+                          <td className="py-3 px-4 font-semibold text-white">
+                            <span>{inv.supplier_name}</span>
+                          </td>
+
+                          {/* Date */}
+                          <td className="py-3 px-4 text-slate-300 font-mono text-[11px]">
+                            {inv.invoice_date || '—'}
+                          </td>
+
+                          {/* Items Count */}
+                          <td className="py-3 px-4 text-center">
+                            <span className="px-2 py-0.5 rounded-md bg-slate-800 border border-slate-700 font-mono font-bold text-slate-300">
+                              {inv.items_count || 1}
+                            </span>
+                          </td>
+
+                          {/* Grand Total */}
+                          <td className="py-3 px-4 font-mono font-bold text-white">
+                            {Number(inv.grand_total || 0).toLocaleString()} ج.م
+                          </td>
+
+                          {/* Paid Amount */}
+                          <td className="py-3 px-4 font-mono font-bold text-emerald-400">
+                            {Number(inv.paid_amount || 0).toLocaleString()} ج.م
+                          </td>
+
+                          {/* Balance Due */}
+                          <td className="py-3 px-4 font-mono font-black">
+                            <span className={balance > 0 ? (isOverdue ? 'text-rose-400' : 'text-amber-400') : 'text-emerald-400'}>
+                              {balance.toLocaleString()} ج.م
+                            </span>
+                          </td>
+
+                          {/* Payment Method */}
+                          <td className="py-3 px-4 text-slate-300">
+                            <span className="px-2 py-0.5 rounded bg-slate-900 border border-slate-800 text-[11px]">
+                              {methodMap[inv.payment_method] || inv.payment_method}
+                            </span>
+                          </td>
+
+                          {/* Status */}
+                          <td className="py-3 px-4 text-center">
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold inline-block ${badge.cls}`}>
+                              {badge.label}
+                            </span>
+                          </td>
+
+                          {/* User */}
+                          <td className="py-3 px-4 text-slate-400 text-[11px]">
+                            {inv.creator_name || '—'}
+                          </td>
+
+                          {/* Actions */}
+                          <td className="py-3 px-4 text-center">
+                            <div className="flex items-center justify-center gap-1.5">
+                              {/* View Details */}
+                              <button
+                                onClick={() => handleOpenInvoiceDetails(inv)}
+                                className="p-1.5 bg-slate-800 hover:bg-sky-600/20 hover:text-sky-400 text-slate-300 rounded-lg transition-colors cursor-pointer"
+                                title="عرض تفاصيل الفاتورة"
+                              >
+                                <Eye className="w-3.5 h-3.5" />
+                              </button>
+
+                              {/* Record Payment */}
+                              {canManage && balance > 0 && (
+                                <button
+                                  onClick={() => handleOpenPayment({ type: 'invoice', invoice: inv })}
+                                  className="p-1.5 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white rounded-lg transition-colors border border-emerald-500/20 cursor-pointer"
+                                  title="تسجيل دفعة سداد لهذه الفاتورة"
+                                >
+                                  <CreditCard className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+
+                              {/* Print */}
+                              <button
+                                onClick={() => handleOpenPrintInvoice(inv)}
+                                className="p-1.5 bg-slate-800 hover:bg-purple-600/20 hover:text-purple-400 text-slate-300 rounded-lg transition-colors cursor-pointer"
+                                title="طباعة الفاتورة"
+                              >
+                                <Printer className="w-3.5 h-3.5" />
+                              </button>
+
+                              {/* Edit */}
+                              {canManage && (
+                                <button
+                                  onClick={() => handleOpenEditInvoice(inv)}
+                                  className="p-1.5 bg-slate-800 hover:bg-amber-600/20 hover:text-amber-400 text-slate-300 rounded-lg transition-colors cursor-pointer"
+                                  title="تعديل الفاتورة"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+
+                              {/* Delete */}
+                              {canDelete && (
+                                <button
+                                  onClick={() => handleDeleteInvoice(inv.id, inv.invoice_number)}
+                                  className="p-1.5 bg-slate-800 hover:bg-rose-600/20 hover:text-rose-400 text-slate-400 rounded-lg transition-colors cursor-pointer"
+                                  title="حذف الفاتورة"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  ) : (
+                    <tr>
+                      <td colSpan={11} className="py-12 text-center text-slate-500">
+                        <FileText className="w-8 h-8 mx-auto mb-2 opacity-30" />
+                        <p className="font-semibold text-sm">لا توجد فواتير مشتريات مطابقة لمعايير البحث</p>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* 5. MODAL: SUPPLIER DETAILS & FINANCIAL LEDGER                  */}
+      {/* ============================================================== */}
+      {showSupplierDetailModal && selectedSupplier && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150">
             {/* Header */}
-            <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/50 print:hidden">
-              <div className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-sky-400" />
-                <h3 className="text-base font-bold text-white">تفاصيل فاتورة المشتريات #{selectedInvoice.invoice_number}</h3>
+            <div className="p-4 sm:p-5 border-b border-slate-800 flex items-center justify-between shrink-0 bg-slate-950/70">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400">
+                  <Truck className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-base text-white">{selectedSupplier.name}</h3>
+                    {selectedSupplier.category && (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
+                        {selectedSupplier.category}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3 text-xs text-slate-400 mt-1">
+                    {selectedSupplier.contact_person && <span>المسؤول: {selectedSupplier.contact_person}</span>}
+                    {selectedSupplier.phone && <span font-mono dir="ltr">📞 {selectedSupplier.phone}</span>}
+                  </div>
+                </div>
               </div>
+
               <div className="flex items-center gap-2">
+                {canManage && Number(selectedSupplier.balance_due || 0) > 0 && (
+                  <button
+                    onClick={() => handleOpenPayment({ type: 'supplier', supplier: selectedSupplier })}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 cursor-pointer shadow-md shadow-emerald-600/20"
+                  >
+                    <CreditCard className="w-3.5 h-3.5" />
+                    <span>سداد دفعة</span>
+                  </button>
+                )}
+                {canManage && (
+                  <button
+                    onClick={() => handleOpenEditSupplier(selectedSupplier)}
+                    className="p-1.5 bg-slate-800 hover:bg-amber-600/20 hover:text-amber-400 text-slate-300 rounded-lg transition-colors cursor-pointer"
+                    title="تعديل بيانات المورد"
+                  >
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                )}
                 <button
-                  onClick={handlePrintInvoice}
-                  className="flex items-center gap-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-bold transition-all"
-                >
-                  <Printer className="w-4 h-4" />
-                  <span>طباعة</span>
-                </button>
-                <button
-                  onClick={() => setShowInvoiceDetailsModal(false)}
-                  className="p-1.5 text-slate-400 hover:text-white rounded-lg"
+                  onClick={() => setShowSupplierDetailModal(false)}
+                  className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
             </div>
 
-            {/* Printable Content */}
-            <div className="p-6 overflow-y-auto space-y-6">
-              {/* Invoice Meta */}
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-slate-950/50 border border-slate-800 rounded-xl text-xs">
-                <div>
-                  <span className="text-slate-400 block">رقم الفاتورة:</span>
-                  <span className="font-mono font-bold text-white text-sm">{selectedInvoice.invoice_number}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block">المورد:</span>
-                  <span className="font-bold text-white text-sm">{selectedInvoice.supplier_name}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block">تاريخ الفاتورة:</span>
-                  <span className="font-mono text-slate-300">{selectedInvoice.invoice_date}</span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block">طريقة السداد:</span>
-                  <span className="font-medium text-slate-300">{selectedInvoice.payment_method}</span>
-                </div>
+            {/* Summary Bar */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 p-4 bg-slate-950/40 border-b border-slate-800/80">
+              <div className="p-3 bg-slate-900/80 rounded-xl border border-slate-800/60">
+                <span className="text-[11px] text-slate-400 block font-medium">إجمالي المشتريات</span>
+                <span className="text-base font-black text-white font-mono mt-0.5 block">
+                  {Number(selectedSupplier.total_purchases || supplierDetailsData?.total_purchases || 0).toLocaleString()} ج.م
+                </span>
               </div>
 
-              {/* Attached Invoice Image (if exists) */}
-              {selectedInvoice.invoice_image_url && (
-                <div className="p-4 bg-slate-950/60 border border-slate-800 rounded-xl space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
-                      <Camera className="w-4 h-4 text-emerald-400" />
-                      <span>صورة الفاتورة المرفقة والمحفوظة:</span>
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setPreviewImage(selectedInvoice.invoice_image_url!)}
-                      className="text-xs text-sky-400 hover:underline flex items-center gap-1"
-                    >
-                      <Eye className="w-3.5 h-3.5" />
-                      <span>معاينة وتكبير الصورة</span>
-                    </button>
-                  </div>
-                  <div
-                    className="relative group max-w-xs rounded-xl overflow-hidden border border-slate-700/80 cursor-pointer shadow-md"
-                    onClick={() => setPreviewImage(selectedInvoice.invoice_image_url!)}
-                  >
-                    <img
-                      src={selectedInvoice.invoice_image_url}
-                      alt={`فاتورة ${selectedInvoice.invoice_number}`}
-                      className="w-full max-h-48 object-cover group-hover:scale-105 transition-transform"
-                    />
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold gap-1">
-                      <Eye className="w-4 h-4" /> اضغط للتكبير
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Items Table */}
-              <div className="border border-slate-800 rounded-xl overflow-hidden">
-                <table className="w-full text-right text-xs">
-                  <thead className="bg-slate-950 text-slate-400 border-b border-slate-800">
-                    <tr>
-                      <th className="py-2.5 px-3">#</th>
-                      <th className="py-2.5 px-3">الصنف المستلم</th>
-                      <th className="py-2.5 px-3">رقم القطعة</th>
-                      <th className="py-2.5 px-3 text-center">الكمية</th>
-                      <th className="py-2.5 px-3 text-center">سعر الوحدة</th>
-                      <th className="py-2.5 px-3 text-left">الإجمالي</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-800">
-                    {selectedInvoice.items?.map((it, i) => (
-                      <tr key={i} className="hover:bg-slate-800/30">
-                        <td className="py-2.5 px-3 text-slate-500">{i + 1}</td>
-                        <td className="py-2.5 px-3 font-semibold text-white">{it.item_name}</td>
-                        <td className="py-2.5 px-3 font-mono text-slate-400">{it.part_number || '-'}</td>
-                        <td className="py-2.5 px-3 text-center font-mono font-bold">{it.quantity}</td>
-                        <td className="py-2.5 px-3 text-center font-mono">{Number(it.unit_cost).toFixed(2)} ج.م</td>
-                        <td className="py-2.5 px-3 text-left font-mono font-bold text-white">
-                          {(it.quantity * it.unit_cost).toFixed(2)} ج.م
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="p-3 bg-slate-900/80 rounded-xl border border-slate-800/60">
+                <span className="text-[11px] text-slate-400 block font-medium">إجمالي المدفوع</span>
+                <span className="text-base font-black text-emerald-400 font-mono mt-0.5 block">
+                  {Number(selectedSupplier.total_paid || supplierDetailsData?.total_paid || 0).toLocaleString()} ج.م
+                </span>
               </div>
 
-              {/* Summary */}
-              <div className="flex justify-end">
-                <div className="w-64 space-y-2 text-xs">
-                  <div className="flex justify-between text-slate-400">
-                    <span>المجموع الفرعي:</span>
-                    <span className="font-mono text-white">{Number(selectedInvoice.subtotal).toFixed(2)} ج.م</span>
-                  </div>
-                  <div className="flex justify-between text-slate-400">
-                    <span>ضريبة القيمة المضافة (15%):</span>
-                    <span className="font-mono text-white">{Number(selectedInvoice.tax_amount).toFixed(2)} ج.م</span>
-                  </div>
-                  <div className="flex justify-between font-bold text-sm text-white pt-2 border-t border-slate-800">
-                    <span>الإجمالي الكلي:</span>
-                    <span className="font-mono text-emerald-400">{Number(selectedInvoice.grand_total).toFixed(2)} ج.م</span>
-                  </div>
-                  <div className="flex justify-between font-bold text-xs text-emerald-400">
-                    <span>المدفوع:</span>
-                    <span className="font-mono">{Number(selectedInvoice.paid_amount).toFixed(2)} ج.م</span>
-                  </div>
-                  <div className="flex justify-between font-bold text-xs text-amber-400 pt-1 border-t border-slate-800">
-                    <span>المتبقي الآجل:</span>
-                    <span className="font-mono">{Number(selectedInvoice.balance_due).toFixed(2)} ج.م</span>
-                  </div>
-                </div>
+              <div className="p-3 bg-slate-900/80 rounded-xl border border-slate-800/60">
+                <span className="text-[11px] text-slate-400 block font-medium">الرصيد المتبقي المستحق</span>
+                <span className={`text-base font-black font-mono mt-0.5 block ${Number(selectedSupplier.balance_due || 0) > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                  {Number(selectedSupplier.balance_due || supplierDetailsData?.balance_due || 0).toLocaleString()} ج.م
+                </span>
+              </div>
+
+              <div className="p-3 bg-slate-900/80 rounded-xl border border-slate-800/60">
+                <span className="text-[11px] text-slate-400 block font-medium">عدد الفواتير</span>
+                <span className="text-base font-black text-sky-400 font-mono mt-0.5 block">
+                  {selectedSupplier.invoice_count || supplierDetailsData?.invoices?.length || 0} فاتورة
+                </span>
               </div>
             </div>
 
-            {/* Footer Buttons */}
-            <div className="p-4 border-t border-slate-800 flex items-center justify-between bg-slate-950/40 print:hidden">
-              {selectedInvoice.balance_due > 0 ? (
-                <button
-                  onClick={() => handleOpenPaymentModal('invoice', selectedInvoice)}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all"
-                >
-                  سداد دفعة من هذه الفاتورة
-                </button>
+            {/* 4 Tabs Navigation */}
+            <div className="flex items-center gap-2 px-4 border-b border-slate-800 bg-slate-950/60 shrink-0">
+              {[
+                { id: 'invoices', label: 'فواتير المشتريات', icon: FileText },
+                { id: 'payments', label: 'سجل المدفوعات', icon: CreditCard },
+                { id: 'ledger', label: 'كشف حركة الحساب', icon: TrendingUp },
+                { id: 'info', label: 'بيانات المورد', icon: Building2 }
+              ].map((t) => {
+                const isSel = supplierDetailTab === t.id;
+                const Icon = t.icon;
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setSupplierDetailTab(t.id as any)}
+                    className={`py-3 px-3 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-all cursor-pointer ${
+                      isSel
+                        ? 'border-sky-500 text-sky-400 bg-sky-500/5'
+                        : 'border-transparent text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <Icon className="w-3.5 h-3.5" />
+                    <span>{t.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Tab Body */}
+            <div className="flex-1 overflow-y-auto p-4 sm:p-5">
+              {loadingSupplierDetails ? (
+                <div className="py-12 text-center text-slate-400">
+                  <div className="w-8 h-8 border-2 border-sky-500 border-t-transparent rounded-full animate-spin mx-auto mb-2" />
+                  <p className="text-xs">جاري تحميل بيانات المورد والحساب...</p>
+                </div>
               ) : (
-                <span className="text-xs text-emerald-400 font-bold">الفاتورة مسددة بالكامل ✓</span>
+                <>
+                  {/* Tab 1: Invoices */}
+                  {supplierDetailTab === 'invoices' && (
+                    <div className="space-y-3">
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-right text-xs">
+                          <thead className="bg-slate-950/80 text-slate-400 border-b border-slate-800">
+                            <tr>
+                              <th className="py-2.5 px-3 font-bold">رقم الفاتورة</th>
+                              <th className="py-2.5 px-3 font-bold">التاريخ</th>
+                              <th className="py-2.5 px-3 font-bold">إجمالي الفاتورة</th>
+                              <th className="py-2.5 px-3 font-bold">المدفوع</th>
+                              <th className="py-2.5 px-3 font-bold">المتبقي</th>
+                              <th className="py-2.5 px-3 font-bold">طريقة الدفع</th>
+                              <th className="py-2.5 px-3 font-bold text-center">الحالة</th>
+                              <th className="py-2.5 px-3 font-bold text-center">عرض</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/60">
+                            {(supplierDetailsData?.invoices || []).length > 0 ? (
+                              supplierDetailsData.invoices.map((inv: any) => (
+                                <tr key={inv.id} className="hover:bg-slate-800/40">
+                                  <td className="py-2.5 px-3 font-mono font-bold text-sky-400">{inv.invoice_number}</td>
+                                  <td className="py-2.5 px-3 font-mono text-slate-300">{inv.invoice_date || '—'}</td>
+                                  <td className="py-2.5 px-3 font-mono text-white font-bold">{Number(inv.grand_total || 0).toLocaleString()} ج.م</td>
+                                  <td className="py-2.5 px-3 font-mono text-emerald-400 font-bold">{Number(inv.paid_amount || 0).toLocaleString()} ج.م</td>
+                                  <td className="py-2.5 px-3 font-mono font-bold text-amber-400">{Number(inv.balance_due || 0).toLocaleString()} ج.م</td>
+                                  <td className="py-2.5 px-3 text-slate-300">{inv.payment_method}</td>
+                                  <td className="py-2.5 px-3 text-center">
+                                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300">
+                                      {inv.payment_status === 'paid' ? 'مدفوعة' : inv.payment_status === 'partially_paid' ? 'جزئية' : 'غير مدفوعة'}
+                                    </span>
+                                  </td>
+                                  <td className="py-2.5 px-3 text-center">
+                                    <button
+                                      onClick={() => handleOpenInvoiceDetails(inv)}
+                                      className="p-1 bg-slate-800 hover:bg-sky-600/20 hover:text-sky-400 rounded text-slate-300"
+                                    >
+                                      <Eye className="w-3.5 h-3.5" />
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))
+                            ) : (
+                              <tr>
+                                <td colSpan={8} className="py-8 text-center text-slate-500">
+                                  لا توجد فواتير شراء مسجلة لهذا المورد
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Tab 2: Payments */}
+                  {supplierDetailTab === 'payments' && (
+                    <div className="space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                          <CreditCard className="w-3.5 h-3.5 text-emerald-400" />
+                          <span>سندات ومدفوعات المورد المسجلة ({supplierDetailsData?.payments?.length || 0})</span>
+                        </h4>
+                        {canManage && (
+                          <button
+                            onClick={() => handleOpenPayment({ type: 'supplier', supplier: selectedSupplier })}
+                            className="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>تسجيل دفعة جديدة</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-right text-xs">
+                          <thead className="bg-slate-950/80 text-slate-400 border-b border-slate-800">
+                            <tr>
+                              <th className="py-2.5 px-3 font-bold">رقم السند</th>
+                              <th className="py-2.5 px-3 font-bold">التاريخ</th>
+                              <th className="py-2.5 px-3 font-bold">الفاتورة المرتبطة</th>
+                              <th className="py-2.5 px-3 font-bold">المبلغ المدفوع</th>
+                              <th className="py-2.5 px-3 font-bold">طريقة الدفع</th>
+                              <th className="py-2.5 px-3 font-bold">رقم المرجع / الحوالة</th>
+                              <th className="py-2.5 px-3 font-bold">المسجل</th>
+                              <th className="py-2.5 px-3 font-bold">ملاحظات</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/60">
+                            {(supplierDetailsData?.payments || []).length > 0 ? (
+                              supplierDetailsData.payments.map((p: any) => (
+                                <tr key={p.id} className="hover:bg-slate-800/40">
+                                  <td className="py-2.5 px-3 font-mono font-bold text-emerald-400">{p.payment_number}</td>
+                                  <td className="py-2.5 px-3 font-mono text-slate-300">{p.payment_date || '—'}</td>
+                                  <td className="py-2.5 px-3 font-mono text-sky-400">{p.invoice_number || 'سداد رصيد'}</td>
+                                  <td className="py-2.5 px-3 font-mono font-black text-emerald-400">
+                                    {Number(p.amount || 0).toLocaleString()} ج.م
+                                  </td>
+                                  <td className="py-2.5 px-3 text-slate-300">{p.payment_method}</td>
+                                  <td className="py-2.5 px-3 font-mono text-slate-400">{p.reference_number || '—'}</td>
+                                  <td className="py-2.5 px-3 text-slate-300">{p.creator_name || '—'}</td>
+                                  <td className="py-2.5 px-3 text-slate-400 max-w-xs truncate">{p.notes || '—'}</td>
+                                </tr>
+                              ))
+                            ) : (
+                              <tr>
+                                <td colSpan={8} className="py-8 text-center text-slate-500">
+                                  لا توجد مدفوعات مسجلة لهذا المورد بعد
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Tab 3: Financial Ledger (كشف حركة الحساب) */}
+                  {supplierDetailTab === 'ledger' && (
+                    <div className="space-y-3">
+                      <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800 text-xs text-slate-400 flex items-center justify-between">
+                        <span>
+                          كشف الحساب المالي للمورد: يوضح فواتير المشتريات (دائن) وسندات السداد (مدين) والرصيد التراكمي المتبقي.
+                        </span>
+                        <span className="font-bold text-white font-mono">
+                          الرصيد الحالي: {Number(supplierDetailsData?.current_balance ?? selectedSupplier.balance_due ?? 0).toLocaleString()} ج.م
+                        </span>
+                      </div>
+
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-right text-xs">
+                          <thead className="bg-slate-950/80 text-slate-400 border-b border-slate-800">
+                            <tr>
+                              <th className="py-2.5 px-3 font-bold">التاريخ</th>
+                              <th className="py-2.5 px-3 font-bold">نوع العملية</th>
+                              <th className="py-2.5 px-3 font-bold">رقم العملية</th>
+                              <th className="py-2.5 px-3 font-bold">الوصف والبيان</th>
+                              <th className="py-2.5 px-3 font-bold text-emerald-400">مدين (سداد)</th>
+                              <th className="py-2.5 px-3 font-bold text-sky-400">دائن (فاتورة)</th>
+                              <th className="py-2.5 px-3 font-bold text-amber-400">الرصيد التراكمي</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/60 font-mono">
+                            {(supplierDetailsData?.ledger || []).length > 0 ? (
+                              supplierDetailsData.ledger.map((item: any, idx: number) => (
+                                <tr key={idx} className="hover:bg-slate-800/40">
+                                  <td className="py-2.5 px-3 text-slate-300">{item.date}</td>
+                                  <td className="py-2.5 px-3">
+                                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                      item.type === 'payment'
+                                        ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                                        : 'bg-sky-500/15 text-sky-400 border border-sky-500/30'
+                                    }`}>
+                                      {item.type_label}
+                                    </span>
+                                  </td>
+                                  <td className="py-2.5 px-3 text-white font-bold">{item.number}</td>
+                                  <td className="py-2.5 px-3 font-sans text-slate-300 max-w-xs truncate">{item.description}</td>
+                                  <td className="py-2.5 px-3 text-emerald-400 font-bold">
+                                    {item.debit > 0 ? `${item.debit.toLocaleString()} ج.م` : '—'}
+                                  </td>
+                                  <td className="py-2.5 px-3 text-sky-400 font-bold">
+                                    {item.credit > 0 ? `${item.credit.toLocaleString()} ج.م` : '—'}
+                                  </td>
+                                  <td className="py-2.5 px-3 font-black text-amber-400">
+                                    {Number(item.balance || 0).toLocaleString()} ج.م
+                                  </td>
+                                </tr>
+                              ))
+                            ) : (
+                              <tr>
+                                <td colSpan={7} className="py-8 text-center text-slate-500 font-sans">
+                                  لا توجد حركات مسجلة بحساب هذا المورد
+                                </td>
+                              </tr>
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Tab 4: Info */}
+                  {supplierDetailTab === 'info' && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800 space-y-3">
+                        <h4 className="text-xs font-bold text-white flex items-center gap-1.5 border-b border-slate-800 pb-2">
+                          <Building2 className="w-4 h-4 text-sky-400" />
+                          <span>البيانات الأساسية وتفاصيل الاتصال</span>
+                        </h4>
+
+                        <div className="space-y-2 text-xs">
+                          <div className="flex justify-between py-1 border-b border-slate-900">
+                            <span className="text-slate-400">اسم المورد / الشركة:</span>
+                            <span className="font-bold text-white">{selectedSupplier.name}</span>
+                          </div>
+
+                          <div className="flex justify-between py-1 border-b border-slate-900">
+                            <span className="text-slate-400">المسؤول / جهة الاتصال:</span>
+                            <span className="text-slate-200">{selectedSupplier.contact_person || '—'}</span>
+                          </div>
+
+                          <div className="flex justify-between py-1 border-b border-slate-900">
+                            <span className="text-slate-400">رقم الهاتف الأساسي:</span>
+                            <span className="font-mono text-white" dir="ltr">{selectedSupplier.phone || '—'}</span>
+                          </div>
+
+                          <div className="flex justify-between py-1 border-b border-slate-900">
+                            <span className="text-slate-400">رقم هاتف إضافي:</span>
+                            <span className="font-mono text-white" dir="ltr">{selectedSupplier.phone_secondary || '—'}</span>
+                          </div>
+
+                          <div className="flex justify-between py-1 border-b border-slate-900">
+                            <span className="text-slate-400">البريد الإلكتروني:</span>
+                            <span className="font-mono text-slate-300" dir="ltr">{selectedSupplier.email || '—'}</span>
+                          </div>
+
+                          <div className="flex justify-between py-1 border-b border-slate-900">
+                            <span className="text-slate-400">الرقم الضريبي / السجل:</span>
+                            <span className="font-mono text-slate-200">{selectedSupplier.tax_number || '—'}</span>
+                          </div>
+
+                          <div className="flex justify-between py-1">
+                            <span className="text-slate-400">العنوان والموقع:</span>
+                            <span className="text-slate-200">{selectedSupplier.address || '—'}</span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800 space-y-3">
+                        <h4 className="text-xs font-bold text-white flex items-center gap-1.5 border-b border-slate-800 pb-2">
+                          <CreditCard className="w-4 h-4 text-emerald-400" />
+                          <span>الشروط التجارية والملاحظات</span>
+                        </h4>
+
+                        <div className="space-y-2 text-xs">
+                          <div className="flex justify-between py-1 border-b border-slate-900">
+                            <span className="text-slate-400">التصنيف الرئيسي:</span>
+                            <span className="font-bold text-sky-400">{selectedSupplier.category}</span>
+                          </div>
+
+                          <div className="flex justify-between py-1 border-b border-slate-900">
+                            <span className="text-slate-400">شروط السداد المتفق عليها:</span>
+                            <span className="text-slate-200">
+                              {selectedSupplier.payment_terms === 'cash'
+                                ? 'سداد نقدي فوري'
+                                : selectedSupplier.payment_terms === 'credit_15'
+                                ? 'آجل 15 يوماً'
+                                : selectedSupplier.payment_terms === 'credit_30'
+                                ? 'آجل 30 يوماً'
+                                : 'آجل 60 يوماً'}
+                            </span>
+                          </div>
+
+                          <div className="pt-2">
+                            <span className="text-slate-400 block mb-1">ملاحظات خاصة بالمورد:</span>
+                            <p className="bg-slate-900 p-2.5 rounded-lg text-slate-300 text-xs border border-slate-800/80 min-h-[60px]">
+                              {selectedSupplier.notes || 'لا توجد ملاحظات مسجلة.'}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
-              <button
-                onClick={() => setShowInvoiceDetailsModal(false)}
-                className="px-4 py-2 border border-slate-700 text-slate-300 rounded-xl text-xs font-bold hover:bg-slate-800 transition-all"
-              >
-                إغلاق
-              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ======================================================== */}
-      {/* 8. MODAL: + إضافة وتعديل مورد                            */}
-      {/* ======================================================== */}
+      {/* ============================================================== */}
+      {/* 6. MODAL: ADD / EDIT SUPPLIER                                  */}
+      {/* ============================================================== */}
       {showSupplierModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-xl flex flex-col shadow-2xl overflow-hidden my-4">
-            <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/50">
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150">
+            <div className="p-4 border-b border-slate-800 flex items-center justify-between shrink-0 bg-slate-950/70">
               <div className="flex items-center gap-2">
-                <Building2 className="w-5 h-5 text-sky-400" />
-                <h3 className="text-base font-bold text-white">
-                  {isEditingSupplier ? 'تعديل بيانات المورد' : 'إضافة مورد / موزع معتمد جديد'}
-                </h3>
+                <div className="w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400">
+                  <Building2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-white">
+                    {isEditingSupplier ? 'تعديل بيانات المورد' : 'إضافة مورد جديد'}
+                  </h3>
+                  <p className="text-[11px] text-slate-400">دليل الموردين وشركات قطع الغيار</p>
+                </div>
               </div>
-              <button onClick={() => setShowSupplierModal(false)} className="text-slate-400 hover:text-white">
+              <button
+                type="button"
+                onClick={() => setShowSupplierModal(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSupplierSubmit} className="p-6 space-y-4">
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-300">
-                  اسم الشركة / المورد <span className="text-rose-500">*</span>
-                </label>
+            <form onSubmit={handleSaveSupplier} className="p-5 space-y-3.5 overflow-y-auto max-h-[80vh]">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">اسم المورد أو الشركة *</label>
                 <input
                   type="text"
-                  placeholder="مثال: شركة بترومين للزيوت، مؤسسة الرواد لقطع الغيار..."
-                  value={supplierFormData.name}
-                  onChange={(e) => setSupplierFormData(prev => ({ ...prev, name: e.target.value }))}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-sky-500"
                   required
+                  placeholder="مثال: شركة النيل لقطع الغيار"
+                  value={supplierFormData.name}
+                  onChange={(e) => setSupplierFormData({ ...supplierFormData, name: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-sky-500"
                 />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-300">مسؤول المبيعات / الاتصال</label>
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">اسم المسؤول / جهة الاتصال</label>
+                <input
+                  type="text"
+                  placeholder="مثال: أ. محمود عبد الله"
+                  value={supplierFormData.contact_person}
+                  onChange={(e) => setSupplierFormData({ ...supplierFormData, contact_person: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-sky-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">رقم الهاتف الأساسي *</label>
                   <input
-                    type="text"
-                    placeholder="اسم المندوب أو المسؤول"
-                    value={supplierFormData.contact_person}
-                    onChange={(e) => setSupplierFormData(prev => ({ ...prev, contact_person: e.target.value }))}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-sky-500"
+                    type="tel"
+                    required
+                    placeholder="01xxxxxxxxx"
+                    value={supplierFormData.phone}
+                    onChange={(e) => setSupplierFormData({ ...supplierFormData, phone: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white font-mono placeholder-slate-600 focus:outline-none focus:border-sky-500"
+                    dir="ltr"
                   />
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-300">رقم الهاتف / الجوال</label>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">رقم هاتف إضافي</label>
                   <input
-                    type="text"
-                    placeholder="05XXXXXXXX"
-                    value={supplierFormData.phone}
-                    onChange={(e) => setSupplierFormData(prev => ({ ...prev, phone: e.target.value }))}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-sky-500 font-mono"
+                    type="tel"
+                    placeholder="رقم آخر / واتساب"
+                    value={supplierFormData.phone_secondary}
+                    onChange={(e) => setSupplierFormData({ ...supplierFormData, phone_secondary: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white font-mono placeholder-slate-600 focus:outline-none focus:border-sky-500"
                     dir="ltr"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-300">تصنيف ما يورده</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">البريد الإلكتروني</label>
+                  <input
+                    type="email"
+                    placeholder="supplier@company.com"
+                    value={supplierFormData.email}
+                    onChange={(e) => setSupplierFormData({ ...supplierFormData, email: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white font-mono placeholder-slate-600 focus:outline-none focus:border-sky-500"
+                    dir="ltr"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">الرقم الضريبي / السجل</label>
+                  <input
+                    type="text"
+                    placeholder="الرقم الضريبي للشركة"
+                    value={supplierFormData.tax_number}
+                    onChange={(e) => setSupplierFormData({ ...supplierFormData, tax_number: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white font-mono placeholder-slate-600 focus:outline-none focus:border-sky-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">تصنيف المورد</label>
                   <select
                     value={supplierFormData.category}
-                    onChange={(e) => setSupplierFormData(prev => ({ ...prev, category: e.target.value }))}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-sky-500"
+                    onChange={(e) => setSupplierFormData({ ...supplierFormData, category: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"
                   >
                     <option value="قطع غيار">قطع غيار عامة</option>
                     <option value="زيوت ومواد تشحيم">زيوت ومواد تشحيم</option>
@@ -2046,54 +1896,57 @@ export const PurchasesView: React.FC = () => {
                   </select>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-300">الرقم الضريبي / السجل التجاري</label>
-                  <input
-                    type="text"
-                    placeholder="300XXXXXXXXXXXX"
-                    value={supplierFormData.tax_number}
-                    onChange={(e) => setSupplierFormData(prev => ({ ...prev, tax_number: e.target.value }))}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-sky-500 font-mono"
-                    dir="ltr"
-                  />
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">شروط السداد</label>
+                  <select
+                    value={supplierFormData.payment_terms}
+                    onChange={(e) => setSupplierFormData({ ...supplierFormData, payment_terms: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"
+                  >
+                    <option value="cash">نقدي فوري</option>
+                    <option value="credit_15">آجل 15 يوماً</option>
+                    <option value="credit_30">آجل 30 يوماً</option>
+                    <option value="credit_60">آجل 60 يوماً</option>
+                  </select>
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-300">العنوان / المدينة</label>
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">العنوان أو المقر</label>
                 <input
                   type="text"
-                  placeholder="مثال: الرياض - صناعية الشفاء - شارع المعارض"
+                  placeholder="المدينة، الحي، الشارع..."
                   value={supplierFormData.address}
-                  onChange={(e) => setSupplierFormData(prev => ({ ...prev, address: e.target.value }))}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-sky-500"
+                  onChange={(e) => setSupplierFormData({ ...supplierFormData, address: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-sky-500"
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-300">ملاحظات وشروط التعامل</label>
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">ملاحظات إضافية</label>
                 <textarea
                   rows={2}
-                  placeholder="شروط الدفع الآجل، مواعيد التوصيل، خصومات الجملة..."
+                  placeholder="أي ملاحظات حول المورد أو مواعيد التسليم..."
                   value={supplierFormData.notes}
-                  onChange={(e) => setSupplierFormData(prev => ({ ...prev, notes: e.target.value }))}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-sky-500"
+                  onChange={(e) => setSupplierFormData({ ...supplierFormData, notes: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-sky-500 resize-none"
                 />
               </div>
 
-              <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-800">
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
                 <button
                   type="button"
                   onClick={() => setShowSupplierModal(false)}
-                  className="px-4 py-2 border border-slate-700 text-slate-300 rounded-xl text-xs font-bold hover:bg-slate-800 transition-all"
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800"
                 >
                   إلغاء
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-bold transition-all"
+                  disabled={supplierSubmitting}
+                  className="px-5 py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-sky-600/20 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
                 >
-                  {isEditingSupplier ? 'حفظ التعديلات' : 'إضافة المورد للدليل'}
+                  {supplierSubmitting ? 'جاري الحفظ...' : isEditingSupplier ? 'حفظ التعديلات' : 'حفظ المورد'}
                 </button>
               </div>
             </form>
@@ -2101,241 +1954,348 @@ export const PurchasesView: React.FC = () => {
         </div>
       )}
 
-      {/* ======================================================== */}
-      {/* 9. MODAL: كشف حساب المورد                                */}
-      {/* ======================================================== */}
-      {showSupplierLedgerModal && supplierDetails && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/85 backdrop-blur-md overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden my-4 print:bg-white print:text-black">
-            <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/50 print:hidden">
+      {/* ============================================================== */}
+      {/* 7. MODAL: CREATE PURCHASE INVOICE                              */}
+      {/* ============================================================== */}
+      {showCreateInvoiceModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-4xl max-h-[92vh] flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150">
+            {/* Header */}
+            <div className="p-4 border-b border-slate-800 flex items-center justify-between shrink-0 bg-slate-950/70">
               <div className="flex items-center gap-2">
-                <Building2 className="w-5 h-5 text-sky-400" />
-                <h3 className="text-base font-bold text-white">كشف حساب المورد: {supplierDetails.name}</h3>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={handlePrintInvoice}
-                  className="flex items-center gap-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-bold"
-                >
-                  <Printer className="w-4 h-4" />
-                  <span>طباعة كشف الحساب</span>
-                </button>
-                <button onClick={() => setShowSupplierLedgerModal(false)} className="text-slate-400 hover:text-white">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="p-6 overflow-y-auto space-y-6">
-              {/* Financial Summary */}
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
-                <div className="p-4 bg-slate-950/60 border border-slate-800 rounded-xl">
-                  <span className="text-xs text-slate-400 block">إجمالي المشتريات المسحوبة</span>
-                  <span className="text-lg font-black text-white font-mono">
-                    {Number(supplierDetails.total_purchases || 0).toFixed(2)} ج.م
-                  </span>
+                <div className="w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400">
+                  <FileText className="w-4 h-4" />
                 </div>
-                <div className="p-4 bg-slate-950/60 border border-slate-800 rounded-xl">
-                  <span className="text-xs text-slate-400 block">إجمالي المسدد له</span>
-                  <span className="text-lg font-black text-emerald-400 font-mono">
-                    {Number(supplierDetails.total_paid || 0).toFixed(2)} ج.م
-                  </span>
-                </div>
-                <div className="p-4 bg-slate-950/60 border border-amber-900/40 rounded-xl">
-                  <span className="text-xs text-amber-300 block">الرصيد الآجل المتبقي (مستحق له)</span>
-                  <span className="text-lg font-black text-amber-400 font-mono">
-                    {Number(supplierDetails.balance_due || 0).toFixed(2)} ج.م
-                  </span>
-                </div>
-              </div>
-
-              {/* Invoices List */}
-              <div>
-                <h4 className="text-sm font-bold text-white mb-3">سجل فواتير التوريد من هذا المورد:</h4>
-                {supplierDetails.invoices?.length === 0 ? (
-                  <p className="text-xs text-slate-500 py-4 text-center">لا توجد فواتير مشتريات مسجلة لهذا المورد بعد.</p>
-                ) : (
-                  <div className="border border-slate-800 rounded-xl overflow-hidden">
-                    <table className="w-full text-right text-xs">
-                      <thead className="bg-slate-950 text-slate-400 border-b border-slate-800">
-                        <tr>
-                          <th className="py-2.5 px-3">رقم الفاتورة</th>
-                          <th className="py-2.5 px-3">التاريخ</th>
-                          <th className="py-2.5 px-3">إجمالي الفاتورة</th>
-                          <th className="py-2.5 px-3">المدفوع</th>
-                          <th className="py-2.5 px-3">المتبقي</th>
-                          <th className="py-2.5 px-3">الحالة</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800">
-                        {supplierDetails.invoices?.map((inv: any) => (
-                          <tr key={inv.id} className="hover:bg-slate-800/30">
-                            <td className="py-2.5 px-3 font-mono font-bold text-sky-400">{inv.invoice_number}</td>
-                            <td className="py-2.5 px-3 font-mono text-slate-300">{inv.invoice_date}</td>
-                            <td className="py-2.5 px-3 font-mono font-bold text-white">{Number(inv.grand_total).toFixed(2)} ج.م</td>
-                            <td className="py-2.5 px-3 font-mono text-emerald-400">{Number(inv.paid_amount).toFixed(2)} ج.م</td>
-                            <td className="py-2.5 px-3 font-mono text-amber-400 font-bold">{Number(inv.balance_due).toFixed(2)} ج.م</td>
-                            <td className="py-2.5 px-3">
-                              {inv.balance_due === 0 ? (
-                                <span className="text-emerald-400">مسددة بالكامل</span>
-                              ) : (
-                                <span className="text-amber-400">بها متبقي</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-
-              {/* Supplied Parts in Inventory */}
-              {supplierDetails.parts && supplierDetails.parts.length > 0 && (
                 <div>
-                  <h4 className="text-sm font-bold text-white mb-3">الأصناف المرتبطة بهذا المورد في المخزن:</h4>
-                  <div className="border border-slate-800 rounded-xl overflow-hidden">
-                    <table className="w-full text-right text-xs">
-                      <thead className="bg-slate-950 text-slate-400 border-b border-slate-800">
-                        <tr>
-                          <th className="py-2.5 px-3">كود الصنف</th>
-                          <th className="py-2.5 px-3">اسم الصنف</th>
-                          <th className="py-2.5 px-3">التصنيف</th>
-                          <th className="py-2.5 px-3">سعر التكلفة</th>
-                          <th className="py-2.5 px-3">سعر البيع</th>
-                          <th className="py-2.5 px-3 text-center">الرصيد بالمخزن</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-slate-800">
-                        {supplierDetails.parts.map((p: any) => (
-                          <tr key={p.id} className="hover:bg-slate-800/30">
-                            <td className="py-2.5 px-3 font-mono text-sky-400">{p.part_number}</td>
-                            <td className="py-2.5 px-3 font-semibold text-white">{p.name}</td>
-                            <td className="py-2.5 px-3 text-slate-400">{p.category}</td>
-                            <td className="py-2.5 px-3 font-mono">{Number(p.cost_price).toFixed(2)} ج.م</td>
-                            <td className="py-2.5 px-3 font-mono text-emerald-400">{Number(p.sale_price).toFixed(2)} ج.م</td>
-                            <td className="py-2.5 px-3 text-center font-mono font-bold text-white">{p.stock_quantity}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                  <h3 className="font-bold text-base text-white">إضافة فاتورة مشتريات وتوريد مخزون</h3>
+                  <p className="text-[11px] text-slate-400">تسجيل مشتريات قطع غيار وتحديث المخزن تلقائياً</p>
                 </div>
-              )}
-            </div>
-
-            <div className="p-4 border-t border-slate-800 flex items-center justify-between bg-slate-950/40 print:hidden">
-              {Number(supplierDetails.balance_due || 0) > 0 && (
-                <button
-                  onClick={() => handleOpenPaymentModal('supplier', supplierDetails)}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all"
-                >
-                  سداد دفعة لحساب المورد
-                </button>
-              )}
-              <button
-                onClick={() => setShowSupplierLedgerModal(false)}
-                className="px-4 py-2 border border-slate-700 text-slate-300 rounded-xl text-xs font-bold hover:bg-slate-800"
-              >
-                إغلاق
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ======================================================== */}
-      {/* 10. MODAL: سداد دفعة للمورد                               */}
-      {/* ======================================================== */}
-      {showPaymentModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
-            <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/50">
-              <div className="flex items-center gap-2">
-                <CreditCard className="w-5 h-5 text-emerald-400" />
-                <h3 className="text-base font-bold text-white">تسجيل سداد دفعة للمورد</h3>
               </div>
-              <button onClick={() => setShowPaymentModal(false)} className="text-slate-400 hover:text-white">
+              <button
+                type="button"
+                onClick={() => setShowCreateInvoiceModal(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSubmitPayment} className="p-5 space-y-4">
-              <div className="p-3 bg-slate-950/70 border border-slate-800 rounded-xl text-xs space-y-1">
-                <div className="flex justify-between">
-                  <span className="text-slate-400">المورد:</span>
-                  <span className="font-bold text-white">
-                    {paymentTargetType === 'invoice' ? selectedInvoice?.supplier_name : selectedSupplier?.name}
-                  </span>
-                </div>
-                {paymentTargetType === 'invoice' && selectedInvoice && (
-                  <div className="flex justify-between">
-                    <span className="text-slate-400">رقم الفاتورة:</span>
-                    <span className="font-mono text-sky-400">{selectedInvoice.invoice_number}</span>
+            <form onSubmit={handleSaveInvoice} className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4">
+              {/* Supplier & Header Info */}
+              <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800 space-y-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* Select or type supplier */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">المورد *</label>
+                    <input
+                      type="text"
+                      list="suppliers-list"
+                      required
+                      placeholder="اختر أو اكتب اسم المورد"
+                      value={invoiceFormData.supplier_name}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const match = suppliers.find((s) => s.name === val);
+                        setInvoiceFormData({
+                          ...invoiceFormData,
+                          supplier_name: val,
+                          supplier_id: match ? match.id : '',
+                          supplier_phone: match?.phone || invoiceFormData.supplier_phone
+                        });
+                      }}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500"
+                    />
+                    <datalist id="suppliers-list">
+                      {suppliers.map((s) => (
+                        <option key={s.id} value={s.name} />
+                      ))}
+                    </datalist>
                   </div>
-                )}
-                <div className="flex justify-between pt-1 border-t border-slate-800/80">
-                  <span className="text-amber-400">المبلغ المستحق حالياً:</span>
-                  <span className="font-mono font-bold text-amber-400">
-                    {paymentTargetType === 'invoice'
-                      ? Number(selectedInvoice?.balance_due || 0).toFixed(2)
-                      : Number(selectedSupplier?.balance_due || 0).toFixed(2)}{' '}
-                    ج.م
-                  </span>
+
+                  {/* Invoice Number */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">رقم الفاتورة *</label>
+                    <input
+                      type="text"
+                      required
+                      value={invoiceFormData.invoice_number}
+                      onChange={(e) => setInvoiceFormData({ ...invoiceFormData, invoice_number: e.target.value })}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-sky-500"
+                    />
+                  </div>
+
+                  {/* Payment Method */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">طريقة الدفع</label>
+                    <select
+                      value={invoiceFormData.payment_method}
+                      onChange={(e) => setInvoiceFormData({ ...invoiceFormData, payment_method: e.target.value })}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-sky-500 cursor-pointer"
+                    >
+                      <option value="cash">نقدي (كاش)</option>
+                      <option value="transfer">تحويل بنكي</option>
+                      <option value="card">بطاقة مدى / ائتمان</option>
+                      <option value="credit">آجل (على الحساب)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                  {/* Invoice Date */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">تاريخ الفاتورة</label>
+                    <input
+                      type="date"
+                      required
+                      value={invoiceFormData.invoice_date}
+                      onChange={(e) => setInvoiceFormData({ ...invoiceFormData, invoice_date: e.target.value })}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-sky-500"
+                    />
+                  </div>
+
+                  {/* Due Date */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">تاريخ الاستحقاق (اختياري)</label>
+                    <input
+                      type="date"
+                      value={invoiceFormData.due_date}
+                      onChange={(e) => setInvoiceFormData({ ...invoiceFormData, due_date: e.target.value })}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-sky-500"
+                    />
+                  </div>
+
+                  {/* Paid Amount Now */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">المبلغ المدفوع الآن</label>
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      value={invoiceFormData.paid_amount}
+                      onChange={(e) => setInvoiceFormData({ ...invoiceFormData, paid_amount: parseFloat(e.target.value) || 0 })}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-emerald-400 font-mono font-bold focus:outline-none focus:border-sky-500"
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-300">مبلغ السداد (ج.م) *</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  min="0.01"
-                  value={paymentAmount}
-                  onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
-                  className="w-full bg-slate-950 border border-emerald-600 rounded-xl px-3 py-2 text-base text-emerald-400 font-mono font-bold focus:outline-none"
-                  required
+              {/* Items Table */}
+              <div className="bg-slate-950/60 p-4 rounded-xl border border-slate-800 space-y-3">
+                <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                  <h4 className="text-xs font-bold text-white flex items-center gap-1.5">
+                    <Package className="w-4 h-4 text-sky-400" />
+                    <span>جدول الأصناف وقطع الغيار المشتراة</span>
+                  </h4>
+                  <button
+                    type="button"
+                    onClick={handleAddItemToInvoice}
+                    className="px-3 py-1 bg-sky-600/20 hover:bg-sky-600/30 text-sky-300 border border-sky-500/30 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer transition-all"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>إضافة بند</span>
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  {invoiceFormData.items.map((item, idx) => {
+                    const rowTotal = Math.max(0, (Number(item.quantity || 0) * Number(item.unit_cost || 0)) - Number(item.discount || 0));
+                    return (
+                      <div key={idx} className="p-3 bg-slate-900/90 rounded-xl border border-slate-800/80 space-y-2">
+                        <div className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                          {/* Item Name */}
+                          <div className="sm:col-span-4">
+                            <label className="block text-[10px] text-slate-400 mb-0.5">الصنف *</label>
+                            <input
+                              type="text"
+                              list={`inventory-parts-${idx}`}
+                              required
+                              placeholder="اسم القطعة أو الصنف"
+                              value={item.item_name}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                const match = inventoryParts.find((p) => p.name === val || p.part_number === val);
+                                const newItems = [...invoiceFormData.items];
+                                newItems[idx] = {
+                                  ...newItems[idx],
+                                  item_name: val,
+                                  part_id: match ? match.id : '',
+                                  part_number: match?.part_number || newItems[idx].part_number,
+                                  unit_cost: match ? Number(match.cost_price || 0) : newItems[idx].unit_cost
+                                };
+                                setInvoiceFormData({ ...invoiceFormData, items: newItems });
+                              }}
+                              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2.5 py-1.5 text-xs text-white focus:outline-none focus:border-sky-500"
+                            />
+                            <datalist id={`inventory-parts-${idx}`}>
+                              {inventoryParts.map((p) => (
+                                <option key={p.id} value={p.name}>
+                                  {p.part_number ? `(${p.part_number})` : ''} - سعر: {p.cost_price} ج.م
+                                </option>
+                              ))}
+                            </datalist>
+                          </div>
+
+                          {/* Part Number / SKU */}
+                          <div className="sm:col-span-2">
+                            <label className="block text-[10px] text-slate-400 mb-0.5">رقم القطعة / SKU</label>
+                            <input
+                              type="text"
+                              placeholder="Part #"
+                              value={item.part_number}
+                              onChange={(e) => {
+                                const newItems = [...invoiceFormData.items];
+                                newItems[idx].part_number = e.target.value;
+                                setInvoiceFormData({ ...invoiceFormData, items: newItems });
+                              }}
+                              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-sky-500"
+                            />
+                          </div>
+
+                          {/* Quantity */}
+                          <div className="sm:col-span-2">
+                            <label className="block text-[10px] text-slate-400 mb-0.5">الكمية *</label>
+                            <input
+                              type="number"
+                              min="1"
+                              step="1"
+                              required
+                              value={item.quantity}
+                              onChange={(e) => {
+                                const newItems = [...invoiceFormData.items];
+                                newItems[idx].quantity = parseInt(e.target.value) || 1;
+                                setInvoiceFormData({ ...invoiceFormData, items: newItems });
+                              }}
+                              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-white font-mono text-center focus:outline-none focus:border-sky-500"
+                            />
+                          </div>
+
+                          {/* Unit Cost */}
+                          <div className="sm:col-span-2">
+                            <label className="block text-[10px] text-slate-400 mb-0.5">سعر الوحدة *</label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="any"
+                              required
+                              value={item.unit_cost}
+                              onChange={(e) => {
+                                const newItems = [...invoiceFormData.items];
+                                newItems[idx].unit_cost = parseFloat(e.target.value) || 0;
+                                setInvoiceFormData({ ...invoiceFormData, items: newItems });
+                              }}
+                              className="w-full bg-slate-950 border border-slate-800 rounded-lg px-2 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-sky-500"
+                            />
+                          </div>
+
+                          {/* Row Total & Delete */}
+                          <div className="sm:col-span-2 flex items-center justify-between sm:justify-end gap-2 pt-3 sm:pt-0">
+                            <span className="font-mono font-bold text-emerald-400 text-xs">
+                              {rowTotal.toLocaleString()} ج.م
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveItemFromInvoice(idx)}
+                              disabled={invoiceFormData.items.length <= 1}
+                              className="p-1 rounded text-rose-400 hover:bg-rose-500/20 disabled:opacity-30 cursor-pointer"
+                              title="حذف البند"
+                            >
+                              <X className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* Inventory Auto-Update Toggle */}
+                        <div className="flex items-center gap-2 pt-1 border-t border-slate-800/60">
+                          <label className="flex items-center gap-1.5 text-[11px] text-slate-300 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={item.update_inventory !== false}
+                              onChange={(e) => {
+                                const newItems = [...invoiceFormData.items];
+                                newItems[idx].update_inventory = e.target.checked;
+                                setInvoiceFormData({ ...invoiceFormData, items: newItems });
+                              }}
+                              className="w-3.5 h-3.5 rounded text-sky-600 bg-slate-950 border-slate-700"
+                            />
+                            <span>تحديث وزيادة كمية هذا الصنف بالمخزن فوراً (+{item.quantity})</span>
+                          </label>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Invoice Calculations & Footer */}
+              <div className="bg-slate-950/80 p-4 rounded-xl border border-slate-800 grid grid-cols-2 sm:grid-cols-6 gap-3 text-xs font-mono">
+                <div>
+                  <span className="text-slate-400 text-[11px] block font-sans">المجموع الفرعي:</span>
+                  <span className="text-white font-bold text-sm">{invoiceCalculations.subtotal.toLocaleString()} ج.م</span>
+                </div>
+
+                <div>
+                  <label className="text-slate-400 text-[11px] block font-sans">خصم إضافي:</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={invoiceFormData.discount_amount}
+                    onChange={(e) => setInvoiceFormData({ ...invoiceFormData, discount_amount: parseFloat(e.target.value) || 0 })}
+                    className="w-24 bg-slate-900 border border-slate-800 rounded px-1.5 py-0.5 text-xs text-amber-400 font-mono mt-0.5"
+                  />
+                </div>
+
+                <div>
+                  <span className="text-slate-400 text-[11px] block font-sans">ضريبة القيمة المضافة:</span>
+                  <span className="text-slate-300 font-bold text-sm">
+                    {invoiceCalculations.taxAmount.toLocaleString()} ج.م
+                    <span className="text-[10px] text-slate-500 mr-1 font-sans">({invoiceFormData.tax_percent}%)</span>
+                  </span>
+                </div>
+
+                <div>
+                  <span className="text-slate-400 text-[11px] block font-sans">الإجمالي النهائي:</span>
+                  <span className="text-white font-black text-sm">{invoiceCalculations.grandTotal.toLocaleString()} ج.م</span>
+                </div>
+
+                <div>
+                  <span className="text-slate-400 text-[11px] block font-sans">المبلغ المدفوع:</span>
+                  <span className="text-emerald-400 font-bold text-sm">{invoiceCalculations.paid.toLocaleString()} ج.م</span>
+                </div>
+
+                <div>
+                  <span className="text-slate-400 text-[11px] block font-sans">المتبقي (آجل):</span>
+                  <span className="text-amber-400 font-black text-sm">{invoiceCalculations.remaining.toLocaleString()} ج.م</span>
+                </div>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">ملاحظات الفاتورة</label>
+                <textarea
+                  rows={2}
+                  placeholder="ملاحظات حول الفاتورة أو شروط الاستلام والتوريد..."
+                  value={invoiceFormData.notes}
+                  onChange={(e) => setInvoiceFormData({ ...invoiceFormData, notes: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-sky-500 resize-none"
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-300">طريقة السداد</label>
-                <select
-                  value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none"
-                >
-                  <option value="transfer">تحويل بنكي</option>
-                  <option value="cash">نقداً (كاش من الخزينة)</option>
-                  <option value="card">شبكة / بطاقة</option>
-                  <option value="cheque">شيك مصرفي</option>
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-300">ملاحظات أو رقم الحوالة</label>
-                <input
-                  type="text"
-                  placeholder="رقم مرجع التحويل أو سند الصرف..."
-                  value={paymentNotes}
-                  onChange={(e) => setPaymentNotes(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-slate-200 focus:outline-none"
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-800">
+              {/* Submit Buttons */}
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800 sticky bottom-0 bg-slate-900 pb-1">
                 <button
                   type="button"
-                  onClick={() => setShowPaymentModal(false)}
-                  className="px-4 py-2 border border-slate-700 text-slate-300 rounded-xl text-xs font-bold hover:bg-slate-800"
+                  onClick={() => setShowCreateInvoiceModal(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800"
                 >
                   إلغاء
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold transition-all shadow-md shadow-emerald-900/30"
+                  disabled={invoiceSubmitting}
+                  className="px-6 py-2.5 bg-sky-600 hover:bg-sky-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-sky-600/20 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
                 >
-                  تأكيد تسجيل السداد
+                  {invoiceSubmitting ? 'جاري الحفظ والتوريد...' : 'حفظ الفاتورة وتوريد المخزون ✓'}
                 </button>
               </div>
             </form>
@@ -2343,51 +2303,487 @@ export const PurchasesView: React.FC = () => {
         </div>
       )}
 
-      {/* ======================================================== */}
-      {/* 11. MODAL: تكبير ومعاينة صورة الفاتورة (Lightbox)         */}
-      {/* ======================================================== */}
-      {previewImage && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/90 backdrop-blur-md"
-          onClick={() => setPreviewImage(null)}
-        >
-          <div
-            className="relative max-w-4xl max-h-[92vh] bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-3 bg-slate-950/90 border-b border-slate-800 flex items-center justify-between text-xs text-slate-300">
-              <span className="font-bold flex items-center gap-1.5 text-white">
-                <Camera className="w-4 h-4 text-emerald-400" />
-                <span>أصل صورة الفاتورة المرفقة</span>
-              </span>
+      {/* ============================================================== */}
+      {/* 8. MODAL: RECORD PAYMENT FOR INVOICE OR SUPPLIER               */}
+      {/* ============================================================== */}
+      {showPaymentModal && paymentTarget && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150">
+            <div className="p-4 border-b border-slate-800 flex items-center justify-between shrink-0 bg-slate-950/70">
               <div className="flex items-center gap-2">
-                <a
-                  href={previewImage}
-                  download
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-semibold"
-                >
-                  فتح / تحميل الأصل
-                </a>
+                <div className="w-8 h-8 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+                  <CreditCard className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-white">تسجيل دفعة سداد للمورد</h3>
+                  <p className="text-[11px] text-slate-400">
+                    {paymentTarget.type === 'invoice'
+                      ? `سداد عن فاتورة [${paymentTarget.invoice?.invoice_number}]`
+                      : `سداد لحساب المورد [${paymentTarget.supplier?.name}]`}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowPaymentModal(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSavePayment} className="p-5 space-y-3.5">
+              {/* Target Balance Info */}
+              <div className="p-3 bg-slate-950/60 rounded-xl border border-slate-800/80 flex items-center justify-between text-xs">
+                <span className="text-slate-400">الرصيد المستحق حالياً:</span>
+                <span className="font-mono font-black text-amber-400 text-sm">
+                  {paymentTarget.type === 'invoice'
+                    ? `${Number(paymentTarget.invoice?.balance_due || 0).toLocaleString()} ج.م`
+                    : `${Number(paymentTarget.supplier?.balance_due || 0).toLocaleString()} ج.م`}
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">مبلغ السداد (ج.م) *</label>
+                <input
+                  type="number"
+                  step="any"
+                  min="0.01"
+                  required
+                  value={paymentAmount}
+                  onChange={(e) => setPaymentAmount(parseFloat(e.target.value) || 0)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-emerald-400 font-mono font-bold focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">طريقة السداد *</label>
+                  <select
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                  >
+                    <option value="transfer">تحويل بنكي</option>
+                    <option value="cash">نقدي (كاش)</option>
+                    <option value="card">بطاقة مدى / ائتمان</option>
+                    <option value="check">شيك مصرفي</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">تاريخ السداد *</label>
+                  <input
+                    type="date"
+                    required
+                    value={paymentDate}
+                    onChange={(e) => setPaymentDate(e.target.value)}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white font-mono focus:outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">رقم المرجع / الحوالة</label>
+                <input
+                  type="text"
+                  placeholder="رقم التحويل أو العملية البنكية"
+                  value={paymentRefNumber}
+                  onChange={(e) => setPaymentRefNumber(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white font-mono focus:outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">ملاحظات السند</label>
+                <textarea
+                  rows={2}
+                  placeholder="أي ملاحظات حول السداد..."
+                  value={paymentNotes}
+                  onChange={(e) => setPaymentNotes(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 resize-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
                 <button
-                  onClick={() => setPreviewImage(null)}
-                  className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+                  type="button"
+                  onClick={() => setShowPaymentModal(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  disabled={paymentSubmitting}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-emerald-600/20 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+                >
+                  {paymentSubmitting ? 'جاري التسجيل...' : 'تأكيد تسجيل السداد ✓'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* 9. MODAL: EDIT PURCHASE INVOICE                                */}
+      {/* ============================================================== */}
+      {showEditInvoiceModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-md flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150">
+            <div className="p-4 border-b border-slate-800 flex items-center justify-between shrink-0 bg-slate-950/70">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                  <Edit2 className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-white">تعديل بيانات فاتورة الشراء</h3>
+                  <p className="text-[11px] text-slate-400 font-mono">{editInvoiceData.invoice_number}</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowEditInvoiceModal(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditInvoice} className="p-5 space-y-3.5">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">رقم الفاتورة *</label>
+                <input
+                  type="text"
+                  required
+                  value={editInvoiceData.invoice_number}
+                  onChange={(e) => setEditInvoiceData({ ...editInvoiceData, invoice_number: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">طريقة الدفع</label>
+                <select
+                  value={editInvoiceData.payment_method}
+                  onChange={(e) => setEditInvoiceData({ ...editInvoiceData, payment_method: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-amber-500"
+                >
+                  <option value="cash">نقدي (كاش)</option>
+                  <option value="transfer">تحويل بنكي</option>
+                  <option value="card">بطاقة مدى / ائتمان</option>
+                  <option value="credit">آجل (على الحساب)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">تاريخ الاستحقاق</label>
+                <input
+                  type="date"
+                  value={editInvoiceData.due_date}
+                  onChange={(e) => setEditInvoiceData({ ...editInvoiceData, due_date: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white font-mono focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">ملاحظات الفاتورة</label>
+                <textarea
+                  rows={3}
+                  value={editInvoiceData.notes}
+                  onChange={(e) => setEditInvoiceData({ ...editInvoiceData, notes: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-xs text-white focus:outline-none focus:border-amber-500 resize-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowEditInvoiceModal(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  disabled={editInvoiceSubmitting}
+                  className="px-5 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold shadow-lg shadow-amber-600/20 disabled:opacity-50 flex items-center gap-1.5 cursor-pointer"
+                >
+                  {editInvoiceSubmitting ? 'جاري الحفظ...' : 'حفظ التعديلات ✓'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================== */}
+      {/* 10. MODAL: INVOICE DETAILS & ITEMS VIEW                        */}
+      {/* ============================================================== */}
+      {showInvoiceDetailsModal && selectedInvoice && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150">
+            <div className="p-4 border-b border-slate-800 flex items-center justify-between shrink-0 bg-slate-950/70">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-sky-500/10 border border-sky-500/20 flex items-center justify-center text-sky-400">
+                  <FileText className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-white">تفاصيل فاتورة المشتريات</h3>
+                  <p className="text-[11px] text-slate-400 font-mono">رقم: {selectedInvoice.invoice_number}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleOpenPrintInvoice(selectedInvoice)}
+                  className="p-1.5 bg-slate-800 hover:bg-purple-600/20 hover:text-purple-400 text-slate-300 rounded-lg transition-colors cursor-pointer"
+                  title="طباعة"
+                >
+                  <Printer className="w-4 h-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowInvoiceDetailsModal(false)}
+                  className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
             </div>
-            <div className="p-4 overflow-auto flex items-center justify-center bg-slate-950">
-              <img
-                src={previewImage}
-                alt="معاينة الفاتورة"
-                className="max-w-full max-h-[80vh] object-contain rounded-lg shadow-xl"
-              />
+
+            <div className="flex-1 overflow-y-auto p-5 space-y-4 text-xs">
+              {/* Overview Details */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-950/60 p-3.5 rounded-xl border border-slate-800/80">
+                <div>
+                  <span className="text-slate-500 block mb-0.5 font-sans">المورد:</span>
+                  <span className="font-bold text-white block text-sm">{selectedInvoice.supplier_name}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block mb-0.5 font-sans">التاريخ:</span>
+                  <span className="font-mono text-slate-300 block">{selectedInvoice.invoice_date}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block mb-0.5 font-sans">طريقة الدفع:</span>
+                  <span className="text-slate-200 block">{selectedInvoice.payment_method}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block mb-0.5 font-sans">المستخدم المسجل:</span>
+                  <span className="text-slate-300 block">{selectedInvoice.creator_name || '—'}</span>
+                </div>
+              </div>
+
+              {/* Items List */}
+              <div className="border border-slate-800 rounded-xl overflow-hidden">
+                <table className="w-full text-right text-xs">
+                  <thead className="bg-slate-950/80 text-slate-400 border-b border-slate-800">
+                    <tr>
+                      <th className="py-2.5 px-3 font-bold">الصنف</th>
+                      <th className="py-2.5 px-3 font-bold">رقم القطعة</th>
+                      <th className="py-2.5 px-3 font-bold text-center">الكمية</th>
+                      <th className="py-2.5 px-3 font-bold">سعر الوحدة</th>
+                      <th className="py-2.5 px-3 font-bold text-left">الإجمالي</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-800/60">
+                    {(selectedInvoice.items || []).length > 0 ? (
+                      selectedInvoice.items?.map((it, i) => (
+                        <tr key={i} className="hover:bg-slate-800/30">
+                          <td className="py-2.5 px-3 font-semibold text-white">{it.item_name}</td>
+                          <td className="py-2.5 px-3 font-mono text-slate-400">{it.part_number || '—'}</td>
+                          <td className="py-2.5 px-3 font-mono text-center">{it.quantity}</td>
+                          <td className="py-2.5 px-3 font-mono text-slate-300">{Number(it.unit_cost || 0).toLocaleString()} ج.م</td>
+                          <td className="py-2.5 px-3 font-mono font-bold text-emerald-400 text-left">
+                            {Number(it.total_cost || (it.quantity * it.unit_cost)).toLocaleString()} ج.م
+                          </td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={5} className="py-6 text-center text-slate-500">
+                          بند مشتريات عام
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Financial Totals */}
+              <div className="p-3.5 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1.5 font-mono text-xs">
+                <div className="flex justify-between text-slate-400">
+                  <span>المجموع الفرعي:</span>
+                  <span>{Number(selectedInvoice.subtotal || 0).toLocaleString()} ج.م</span>
+                </div>
+                {Number(selectedInvoice.discount_amount || 0) > 0 && (
+                  <div className="flex justify-between text-amber-400">
+                    <span>الخصم الممنوح:</span>
+                    <span>-{Number(selectedInvoice.discount_amount).toLocaleString()} ج.م</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-slate-400">
+                  <span>ضريبة القيمة المضافة ({selectedInvoice.tax_percent}%):</span>
+                  <span>{Number(selectedInvoice.tax_amount || 0).toLocaleString()} ج.م</span>
+                </div>
+                <div className="flex justify-between text-white font-black text-sm pt-1 border-t border-slate-800">
+                  <span>الإجمالي النهائي للفاتورة:</span>
+                  <span>{Number(selectedInvoice.grand_total || 0).toLocaleString()} ج.م</span>
+                </div>
+                <div className="flex justify-between text-emerald-400 font-bold">
+                  <span>المبلغ المسدد:</span>
+                  <span>{Number(selectedInvoice.paid_amount || 0).toLocaleString()} ج.م</span>
+                </div>
+                <div className="flex justify-between text-amber-400 font-black">
+                  <span>الرصيد المتبقي المستحق:</span>
+                  <span>{Number(selectedInvoice.balance_due || 0).toLocaleString()} ج.م</span>
+                </div>
+              </div>
+
+              {selectedInvoice.notes && (
+                <div className="p-3 bg-slate-950/40 rounded-xl border border-slate-800">
+                  <span className="text-slate-400 block text-[11px] mb-1">ملاحظات:</span>
+                  <p className="text-slate-300">{selectedInvoice.notes}</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
       )}
+
+      {/* ============================================================== */}
+      {/* 11. MODAL: PRINT INVOICE TEMPLATE                              */}
+      {/* ============================================================== */}
+      {showPrintModal && selectedInvoice && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5">
+          <div className="bg-white text-slate-900 rounded-2xl w-full max-w-2xl max-h-[92vh] flex flex-col overflow-hidden shadow-2xl">
+            {/* Toolbar */}
+            <div className="p-3 bg-slate-100 border-b border-slate-200 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-2">
+                <Printer className="w-4 h-4 text-slate-600" />
+                <span className="text-xs font-bold text-slate-700">معاينة طباعة فاتورة التوريد</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => window.print()}
+                  className="px-4 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" />
+                  <span>طباعة فورية</span>
+                </button>
+                <button
+                  onClick={() => setShowPrintModal(false)}
+                  className="p-1.5 text-slate-500 hover:text-slate-800 rounded-lg hover:bg-slate-200"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Printable Paper Area */}
+            <div className="flex-1 overflow-y-auto p-8 space-y-6 text-slate-900 bg-white" dir="rtl">
+              {/* Header */}
+              <div className="flex justify-between items-start border-b border-slate-200 pb-4">
+                <div>
+                  <h2 className="text-lg font-black text-slate-900">مركز صيانة وخدمات السيارات المتكاملة</h2>
+                  <p className="text-xs text-slate-500 mt-0.5">قسم التوريدات والمشتريات وإدارة المخازن</p>
+                </div>
+                <div className="text-left font-mono">
+                  <span className="text-xs font-bold px-2 py-0.5 bg-slate-100 rounded border border-slate-300">
+                    فاتورة شراء / توريد
+                  </span>
+                  <p className="text-sm font-black text-slate-900 mt-1">#{selectedInvoice.invoice_number}</p>
+                  <p className="text-[11px] text-slate-500">التاريخ: {selectedInvoice.invoice_date}</p>
+                </div>
+              </div>
+
+              {/* Supplier Info Box */}
+              <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 grid grid-cols-2 gap-3 text-xs">
+                <div>
+                  <span className="text-slate-500 block">المورد / جهة التوريد:</span>
+                  <span className="font-bold text-slate-900 text-sm block mt-0.5">{selectedInvoice.supplier_name}</span>
+                  {selectedInvoice.supplier_phone && (
+                    <span className="text-slate-600 font-mono block mt-0.5" dir="ltr">📞 {selectedInvoice.supplier_phone}</span>
+                  )}
+                </div>
+                <div>
+                  <span className="text-slate-500 block">طريقة السداد:</span>
+                  <span className="font-semibold text-slate-800 block mt-0.5">{selectedInvoice.payment_method}</span>
+                  {selectedInvoice.due_date && (
+                    <span className="text-amber-700 block mt-0.5">تاريخ الاستحقاق: {selectedInvoice.due_date}</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Items Table */}
+              <table className="w-full text-right text-xs border border-slate-200">
+                <thead className="bg-slate-100 text-slate-700 border-b border-slate-200">
+                  <tr>
+                    <th className="py-2 px-3 font-bold border-l border-slate-200">م</th>
+                    <th className="py-2 px-3 font-bold border-l border-slate-200">الصنف / الوصف</th>
+                    <th className="py-2 px-3 font-bold border-l border-slate-200">رقم القطعة</th>
+                    <th className="py-2 px-3 font-bold text-center border-l border-slate-200">الكمية</th>
+                    <th className="py-2 px-3 font-bold border-l border-slate-200">سعر الوحدة</th>
+                    <th className="py-2 px-3 font-bold text-left">الإجمالي</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {(selectedInvoice.items || []).map((it, idx) => (
+                    <tr key={idx}>
+                      <td className="py-2 px-3 font-mono border-l border-slate-200">{idx + 1}</td>
+                      <td className="py-2 px-3 font-semibold border-l border-slate-200">{it.item_name}</td>
+                      <td className="py-2 px-3 font-mono text-slate-600 border-l border-slate-200">{it.part_number || '—'}</td>
+                      <td className="py-2 px-3 font-mono text-center border-l border-slate-200">{it.quantity}</td>
+                      <td className="py-2 px-3 font-mono border-l border-slate-200">{Number(it.unit_cost || 0).toLocaleString()} ج.م</td>
+                      <td className="py-2 px-3 font-mono font-bold text-left">
+                        {Number(it.total_cost || (it.quantity * it.unit_cost)).toLocaleString()} ج.م
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {/* Totals */}
+              <div className="flex justify-end">
+                <div className="w-64 space-y-1.5 text-xs font-mono border border-slate-200 p-3 rounded-lg bg-slate-50">
+                  <div className="flex justify-between text-slate-600">
+                    <span>المجموع الفرعي:</span>
+                    <span>{Number(selectedInvoice.subtotal || 0).toLocaleString()} ج.م</span>
+                  </div>
+                  <div className="flex justify-between text-slate-600">
+                    <span>الضريبة ({selectedInvoice.tax_percent}%):</span>
+                    <span>{Number(selectedInvoice.tax_amount || 0).toLocaleString()} ج.م</span>
+                  </div>
+                  <div className="flex justify-between text-slate-900 font-black text-sm pt-1 border-t border-slate-300">
+                    <span>الإجمالي:</span>
+                    <span>{Number(selectedInvoice.grand_total || 0).toLocaleString()} ج.م</span>
+                  </div>
+                  <div className="flex justify-between text-emerald-700 font-bold">
+                    <span>المدفوع:</span>
+                    <span>{Number(selectedInvoice.paid_amount || 0).toLocaleString()} ج.م</span>
+                  </div>
+                  <div className="flex justify-between text-amber-800 font-bold">
+                    <span>المتبقي:</span>
+                    <span>{Number(selectedInvoice.balance_due || 0).toLocaleString()} ج.م</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Signatures */}
+              <div className="grid grid-cols-2 gap-12 pt-8 border-t border-slate-200 text-xs">
+                <div className="text-center space-y-6">
+                  <p className="font-bold text-slate-700">توقيع المستلم / مسؤول المخزن</p>
+                  <p className="text-slate-400 font-mono">........................................</p>
+                </div>
+                <div className="text-center space-y-6">
+                  <p className="font-bold text-slate-700">توقيع المورد أو المندوب</p>
+                  <p className="text-slate-400 font-mono">........................................</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

@@ -334,6 +334,7 @@ export interface Supplier {
   name: string;
   contact_person?: string;
   phone?: string;
+  phone_secondary?: string;
   email?: string;
   tax_number?: string;
   address?: string;
@@ -345,10 +346,15 @@ export interface Supplier {
   total_paid?: number;
   balance_due?: number;
   last_invoice_date?: string;
+  last_payment_date?: string;
+  overdue_count?: number;
+  account_status?: 'paid' | 'unpaid' | 'overdue';
   created_at: string;
   updated_at: string;
   invoices?: PurchaseInvoice[];
   parts?: any[];
+  payments?: SupplierPayment[];
+  ledger?: any[];
 }
 
 export interface PurchaseInvoiceItem {
@@ -357,8 +363,10 @@ export interface PurchaseInvoiceItem {
   part_id?: string;
   item_name: string;
   part_number?: string;
+  sku?: string;
   quantity: number;
   unit_cost: number;
+  discount?: number;
   total_cost?: number;
   update_inventory?: number | boolean;
   current_part_number?: string;
@@ -382,6 +390,7 @@ export interface PurchaseInvoice {
   supplier_category?: string;
   supplier_address?: string;
   subtotal: number;
+  discount_amount?: number;
   tax_percent: number;
   tax_amount: number;
   grand_total: number;
@@ -398,5 +407,22 @@ export interface PurchaseInvoice {
   items?: PurchaseInvoiceItem[];
   created_at: string;
   updated_at: string;
+}
+
+export interface SupplierPayment {
+  id: string;
+  workshop_id: string;
+  payment_number: string;
+  supplier_id: string;
+  purchase_invoice_id?: string;
+  amount: number;
+  payment_method: string;
+  reference_number?: string;
+  payment_date: string;
+  notes?: string;
+  created_by: string;
+  created_at: string;
+  creator_name?: string;
+  invoice_number?: string;
 }
 

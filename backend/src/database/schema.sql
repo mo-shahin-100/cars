@@ -581,4 +581,26 @@ CREATE TABLE IF NOT EXISTS purchase_invoice_items (
 );
 CREATE INDEX IF NOT EXISTS idx_purchase_items_invoice ON purchase_invoice_items(purchase_invoice_id);
 
+-- 28. مدفوعات الموردين (Supplier Payments)
+CREATE TABLE IF NOT EXISTS supplier_payments (
+    id TEXT PRIMARY KEY,
+    workshop_id TEXT NOT NULL,
+    payment_number TEXT NOT NULL,
+    supplier_id TEXT NOT NULL,
+    purchase_invoice_id TEXT,
+    amount REAL NOT NULL,
+    payment_method TEXT NOT NULL DEFAULT 'cash', -- 'cash', 'transfer', 'card', 'check'
+    reference_number TEXT,
+    payment_date DATE DEFAULT (DATE('now')),
+    notes TEXT,
+    created_by TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (workshop_id) REFERENCES workshops(id),
+    FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE CASCADE,
+    FOREIGN KEY (purchase_invoice_id) REFERENCES purchase_invoices(id) ON DELETE SET NULL,
+    FOREIGN KEY (created_by) REFERENCES users(id)
+);
+CREATE INDEX IF NOT EXISTS idx_supplier_payments_sup ON supplier_payments(supplier_id);
+CREATE INDEX IF NOT EXISTS idx_supplier_payments_inv ON supplier_payments(purchase_invoice_id);
+
 

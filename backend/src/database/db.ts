@@ -37,6 +37,34 @@ export function initDatabase() {
   try { db.exec('ALTER TABLE parts ADD COLUMN image_url TEXT NULL'); } catch (e) {}
   try { db.exec('ALTER TABLE stock_movements ADD COLUMN customer_id TEXT NULL'); } catch (e) {}
   try { db.exec('ALTER TABLE stock_movements ADD COLUMN customer_name TEXT NULL'); } catch (e) {}
+  try { db.exec('ALTER TABLE suppliers ADD COLUMN phone_secondary TEXT NULL'); } catch (e) {}
+  try { db.exec('ALTER TABLE purchase_invoices ADD COLUMN discount_amount REAL DEFAULT 0.0'); } catch (e) {}
+  try { db.exec('ALTER TABLE purchase_invoice_items ADD COLUMN discount REAL DEFAULT 0.0'); } catch (e) {}
+  try { db.exec('ALTER TABLE purchase_invoice_items ADD COLUMN sku TEXT NULL'); } catch (e) {}
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS supplier_payments (
+        id TEXT PRIMARY KEY,
+        workshop_id TEXT NOT NULL,
+        payment_number TEXT NOT NULL,
+        supplier_id TEXT NOT NULL,
+        purchase_invoice_id TEXT,
+        amount REAL NOT NULL,
+        payment_method TEXT NOT NULL DEFAULT 'cash',
+        reference_number TEXT,
+        payment_date DATE DEFAULT (DATE('now')),
+        notes TEXT,
+        created_by TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (workshop_id) REFERENCES workshops(id),
+        FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON DELETE CASCADE,
+        FOREIGN KEY (purchase_invoice_id) REFERENCES purchase_invoices(id) ON DELETE SET NULL,
+        FOREIGN KEY (created_by) REFERENCES users(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_supplier_payments_sup ON supplier_payments(supplier_id);
+      CREATE INDEX IF NOT EXISTS idx_supplier_payments_inv ON supplier_payments(purchase_invoice_id);
+    `);
+  } catch (e) {}
 
   // Seed screenshot demo parts if not existing
   try {

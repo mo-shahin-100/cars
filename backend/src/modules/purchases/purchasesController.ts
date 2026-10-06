@@ -15,6 +15,7 @@ export function getSuppliers(req: Request, res: Response) {
   const workshopId = req.user?.workshop_id || 'ws_default_01';
   const search = (req.query.search as string || '').trim();
   const category = req.query.category as string;
+  const status = req.query.status as string;
 
   let sql = `
     SELECT 
@@ -23,26 +24,46 @@ export function getSuppliers(req: Request, res: Response) {
       COALESCE(SUM(pi.grand_total), 0) as total_purchases,
       COALESCE(SUM(pi.paid_amount), 0) as total_paid,
       COALESCE(SUM(pi.balance_due), 0) as balance_due,
-      MAX(pi.invoice_date) as last_invoice_date
+      MAX(pi.invoice_date) as last_invoice_date,
+      (SELECT MAX(payment_date) FROM supplier_payments sp WHERE sp.supplier_id = s.id) as last_payment_date,
+      COUNT(CASE WHEN pi.balance_due > 0 AND pi.due_date IS NOT NULL AND pi.due_date < date('now') THEN 1 END) as overdue_count
     FROM suppliers s
     LEFT JOIN purchase_invoices pi ON (pi.supplier_id = s.id OR pi.supplier_name = s.name) AND pi.deleted_at IS NULL AND pi.workshop_id = s.workshop_id
     WHERE s.workshop_id = ? AND s.deleted_at IS NULL
   `;
   const params: any[] = [workshopId];
 
-  if (category) {
+  if (category && category !== 'all') {
     sql += ` AND s.category = ?`;
     params.push(category);
   }
 
   if (search) {
-    sql += ` AND (s.name LIKE ? OR s.phone LIKE ? OR s.contact_person LIKE ? OR s.tax_number LIKE ? OR s.notes LIKE ?)`;
-    params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
+    sql += ` AND (s.name LIKE ? OR s.phone LIKE ? OR s.phone_secondary LIKE ? OR s.contact_person LIKE ? OR s.tax_number LIKE ? OR s.notes LIKE ?)`;
+    params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
   }
 
   sql += ` GROUP BY s.id ORDER BY balance_due DESC, s.name ASC`;
 
   const suppliers = db.prepare(sql).all(...params);
+
+  // Process account status for each supplier
+  let processedSuppliers = (suppliers as any[]).map(sup => {
+    let account_status: 'paid' | 'unpaid' | 'overdue' = 'paid';
+    if (sup.overdue_count > 0) {
+      account_status = 'overdue';
+    } else if (sup.balance_due > 0) {
+      account_status = 'unpaid';
+    }
+    return {
+      ...sup,
+      account_status
+    };
+  });
+
+  if (status && status !== 'all') {
+    processedSuppliers = processedSuppliers.filter(s => s.account_status === status);
+  }
 
   // Overall suppliers summary stats
   const summary = db.prepare(`
@@ -58,13 +79,13 @@ export function getSuppliers(req: Request, res: Response) {
 
   return res.json({
     success: true,
-    data: suppliers,
+    data: processedSuppliers,
     summary
   });
 }
 
 /**
- * Get supplier details with invoices and parts supplied
+ * Get supplier details with invoices, payments, parts supplied, and account ledger
  */
 export function getSupplierById(req: Request, res: Response) {
   const workshopId = req.user?.workshop_id || 'ws_default_01';
@@ -77,7 +98,9 @@ export function getSupplierById(req: Request, res: Response) {
       COALESCE(SUM(pi.grand_total), 0) as total_purchases,
       COALESCE(SUM(pi.paid_amount), 0) as total_paid,
       COALESCE(SUM(pi.balance_due), 0) as balance_due,
-      MAX(pi.invoice_date) as last_invoice_date
+      MAX(pi.invoice_date) as last_invoice_date,
+      (SELECT MAX(payment_date) FROM supplier_payments sp WHERE sp.supplier_id = s.id) as last_payment_date,
+      COUNT(CASE WHEN pi.balance_due > 0 AND pi.due_date IS NOT NULL AND pi.due_date < date('now') THEN 1 END) as overdue_count
     FROM suppliers s
     LEFT JOIN purchase_invoices pi ON (pi.supplier_id = s.id OR pi.supplier_name = s.name) AND pi.deleted_at IS NULL AND pi.workshop_id = s.workshop_id
     WHERE s.id = ? AND s.workshop_id = ? AND s.deleted_at IS NULL
@@ -88,12 +111,32 @@ export function getSupplierById(req: Request, res: Response) {
     return res.status(404).json({ success: false, error: 'المورد غير موجود' });
   }
 
+  let account_status: 'paid' | 'unpaid' | 'overdue' = 'paid';
+  if (supplier.overdue_count > 0) {
+    account_status = 'overdue';
+  } else if (supplier.balance_due > 0) {
+    account_status = 'unpaid';
+  }
+  supplier.account_status = account_status;
+
   // Get invoices from this supplier
   const invoices = db.prepare(`
-    SELECT * FROM purchase_invoices 
-    WHERE (supplier_id = ? OR supplier_name = ?) AND workshop_id = ? AND deleted_at IS NULL
-    ORDER BY invoice_date DESC, created_at DESC
+    SELECT pi.*, u.full_name as creator_name
+    FROM purchase_invoices pi
+    LEFT JOIN users u ON pi.created_by = u.id
+    WHERE (pi.supplier_id = ? OR pi.supplier_name = ?) AND pi.workshop_id = ? AND pi.deleted_at IS NULL
+    ORDER BY pi.invoice_date DESC, pi.created_at DESC
   `).all(id, supplier.name, workshopId);
+
+  // Get payments made to this supplier
+  const payments = db.prepare(`
+    SELECT sp.*, u.full_name as creator_name, pi.invoice_number
+    FROM supplier_payments sp
+    LEFT JOIN users u ON sp.created_by = u.id
+    LEFT JOIN purchase_invoices pi ON sp.purchase_invoice_id = pi.id
+    WHERE sp.supplier_id = ? AND sp.workshop_id = ?
+    ORDER BY sp.payment_date DESC, sp.created_at DESC
+  `).all(id, workshopId);
 
   // Get parts supplied by this supplier
   const parts = db.prepare(`
@@ -103,12 +146,151 @@ export function getSupplierById(req: Request, res: Response) {
     ORDER BY name ASC
   `).all(workshopId, supplier.name);
 
+  // Compute detailed financial ledger (كشف حركة الحساب)
+  const ledgerItems: any[] = [];
+  for (const inv of invoices as any[]) {
+    ledgerItems.push({
+      id: inv.id,
+      date: inv.invoice_date || inv.created_at,
+      type: 'invoice',
+      type_label: 'فاتورة شراء',
+      number: inv.invoice_number,
+      description: `فاتورة مشتريات [${inv.invoice_number}]` + (inv.notes ? ` - ${inv.notes}` : ''),
+      debit: 0,
+      credit: Number(inv.grand_total || 0),
+      timestamp: new Date(inv.invoice_date || inv.created_at).getTime()
+    });
+  }
+  for (const pay of payments as any[]) {
+    const methodMap: Record<string, string> = {
+      cash: 'نقدي',
+      transfer: 'تحويل بنكي',
+      card: 'بطاقة مدى / ائتمان',
+      check: 'شيك'
+    };
+    const methodLabel = methodMap[pay.payment_method] || pay.payment_method;
+    ledgerItems.push({
+      id: pay.id,
+      date: pay.payment_date || pay.created_at,
+      type: 'payment',
+      type_label: 'سند صرف / سداد دفعة',
+      number: pay.payment_number,
+      description: `سداد للمورد (${methodLabel})` + (pay.invoice_number ? ` عن فاتورة [${pay.invoice_number}]` : '') + (pay.notes ? ` - ${pay.notes}` : ''),
+      debit: Number(pay.amount || 0),
+      credit: 0,
+      timestamp: new Date(pay.payment_date || pay.created_at).getTime()
+    });
+  }
+
+  ledgerItems.sort((a, b) => a.timestamp - b.timestamp);
+  let runningBalance = 0;
+  for (const item of ledgerItems) {
+    runningBalance += (item.credit - item.debit);
+    item.balance = runningBalance;
+  }
+
   return res.json({
     success: true,
     data: {
       ...supplier,
       invoices,
-      parts
+      payments,
+      parts,
+      ledger: [...ledgerItems].reverse()
+    }
+  });
+}
+
+/**
+ * Get supplier payments list
+ */
+export function getSupplierPayments(req: Request, res: Response) {
+  const workshopId = req.user?.workshop_id || 'ws_default_01';
+  const { id } = req.params;
+
+  const payments = db.prepare(`
+    SELECT sp.*, u.full_name as creator_name, pi.invoice_number
+    FROM supplier_payments sp
+    LEFT JOIN users u ON sp.created_by = u.id
+    LEFT JOIN purchase_invoices pi ON sp.purchase_invoice_id = pi.id
+    WHERE sp.supplier_id = ? AND sp.workshop_id = ?
+    ORDER BY sp.payment_date DESC, sp.created_at DESC
+  `).all(id, workshopId);
+
+  return res.json({ success: true, data: payments });
+}
+
+/**
+ * Get supplier financial ledger statement
+ */
+export function getSupplierLedger(req: Request, res: Response) {
+  const workshopId = req.user?.workshop_id || 'ws_default_01';
+  const { id } = req.params;
+
+  const supplier = db.prepare(`SELECT * FROM suppliers WHERE id = ? AND workshop_id = ? AND deleted_at IS NULL`).get(id, workshopId) as any;
+  if (!supplier) {
+    return res.status(404).json({ success: false, error: 'المورد غير موجود' });
+  }
+
+  const invoices = db.prepare(`
+    SELECT id, invoice_number, grand_total, paid_amount, balance_due, invoice_date, created_at, notes
+    FROM purchase_invoices 
+    WHERE (supplier_id = ? OR supplier_name = ?) AND workshop_id = ? AND deleted_at IS NULL
+    ORDER BY invoice_date ASC, created_at ASC
+  `).all(id, supplier.name, workshopId) as any[];
+
+  const payments = db.prepare(`
+    SELECT sp.*, u.full_name as creator_name, pi.invoice_number
+    FROM supplier_payments sp
+    LEFT JOIN users u ON sp.created_by = u.id
+    LEFT JOIN purchase_invoices pi ON sp.purchase_invoice_id = pi.id
+    WHERE sp.supplier_id = ? AND sp.workshop_id = ?
+    ORDER BY sp.payment_date ASC, sp.created_at ASC
+  `).all(id, workshopId) as any[];
+
+  const ledgerItems: any[] = [];
+  for (const inv of invoices) {
+    ledgerItems.push({
+      id: inv.id,
+      date: inv.invoice_date || inv.created_at,
+      type: 'invoice',
+      type_label: 'فاتورة شراء',
+      number: inv.invoice_number,
+      description: `فاتورة مشتريات [${inv.invoice_number}]` + (inv.notes ? ` - ${inv.notes}` : ''),
+      debit: 0,
+      credit: Number(inv.grand_total || 0),
+      timestamp: new Date(inv.invoice_date || inv.created_at).getTime()
+    });
+  }
+  for (const pay of payments) {
+    ledgerItems.push({
+      id: pay.id,
+      date: pay.payment_date || pay.created_at,
+      type: 'payment',
+      type_label: 'سداد دفعة للمورد',
+      number: pay.payment_number,
+      description: `سداد للمورد (${pay.payment_method})` + (pay.invoice_number ? ` عن فاتورة [${pay.invoice_number}]` : '') + (pay.notes ? ` - ${pay.notes}` : ''),
+      debit: Number(pay.amount || 0),
+      credit: 0,
+      timestamp: new Date(pay.payment_date || pay.created_at).getTime()
+    });
+  }
+
+  ledgerItems.sort((a, b) => a.timestamp - b.timestamp);
+  let runningBalance = 0;
+  for (const item of ledgerItems) {
+    runningBalance += (item.credit - item.debit);
+    item.balance = runningBalance;
+  }
+
+  return res.json({
+    success: true,
+    data: {
+      supplier,
+      ledger: [...ledgerItems].reverse(),
+      total_invoices: invoices.length,
+      total_payments: payments.length,
+      current_balance: runningBalance
     }
   });
 }
@@ -122,6 +304,7 @@ export function createSupplier(req: Request, res: Response) {
     name,
     contact_person,
     phone,
+    phone_secondary,
     email,
     tax_number,
     address,
@@ -148,14 +331,15 @@ export function createSupplier(req: Request, res: Response) {
 
   db.prepare(`
     INSERT INTO suppliers (
-      id, workshop_id, name, contact_person, phone, email, tax_number, address, category, payment_terms, notes
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      id, workshop_id, name, contact_person, phone, phone_secondary, email, tax_number, address, category, payment_terms, notes
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     workshopId,
     name.trim(),
     contact_person?.trim() || null,
     phone?.trim() || null,
+    phone_secondary?.trim() || null,
     email?.trim() || null,
     tax_number?.trim() || null,
     address?.trim() || null,
@@ -192,6 +376,7 @@ export function updateSupplier(req: Request, res: Response) {
     name,
     contact_person,
     phone,
+    phone_secondary,
     email,
     tax_number,
     address,
@@ -217,6 +402,7 @@ export function updateSupplier(req: Request, res: Response) {
       name = COALESCE(?, name),
       contact_person = ?,
       phone = ?,
+      phone_secondary = ?,
       email = ?,
       tax_number = ?,
       address = ?,
@@ -229,6 +415,7 @@ export function updateSupplier(req: Request, res: Response) {
     name?.trim() || supplier.name,
     contact_person !== undefined ? contact_person?.trim() || null : supplier.contact_person,
     phone !== undefined ? phone?.trim() || null : supplier.phone,
+    phone_secondary !== undefined ? phone_secondary?.trim() || null : supplier.phone_secondary,
     email !== undefined ? email?.trim() || null : supplier.email,
     tax_number !== undefined ? tax_number?.trim() || null : supplier.tax_number,
     address !== undefined ? address?.trim() || null : supplier.address,
@@ -341,6 +528,27 @@ export function paySupplierBalance(req: Request, res: Response) {
           WHERE id = ? AND workshop_id = ?
         `).run(newPaid, newBalance, newStatus, payment_method || 'transfer', inv.id, workshopId);
 
+        // Record payment in supplier_payments
+        const payNum = `PAY-SUP-${Date.now().toString().slice(-6)}`;
+        db.prepare(`
+          INSERT INTO supplier_payments (
+            id, workshop_id, payment_number, supplier_id, purchase_invoice_id,
+            amount, payment_method, reference_number, payment_date, notes, created_by
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          uuidv4(),
+          workshopId,
+          payNum,
+          id,
+          inv.id,
+          payForThisInv,
+          payment_method || 'transfer',
+          req.body.reference_number || null,
+          req.body.payment_date || new Date().toISOString().slice(0, 10),
+          notes || `سداد لحساب المورد عن فاتورة [${inv.invoice_number}]`,
+          req.user?.id || 'admin'
+        );
+
         remainingToPay -= payForThisInv;
         updatedInvoices.push({ id: inv.id, invoice_number: inv.invoice_number, paid: payForThisInv, remaining: newBalance });
       }
@@ -434,10 +642,15 @@ export function getPurchaseInvoices(req: Request, res: Response) {
       COALESCE(SUM(grand_total), 0) as total_purchases,
       COALESCE(SUM(paid_amount), 0) as total_paid,
       COALESCE(SUM(balance_due), 0) as total_balance_due,
-      COUNT(*) as total_invoices
+      COUNT(*) as total_invoices,
+      COALESCE(SUM(CASE WHEN strftime('%Y-%m', invoice_date) = strftime('%Y-%m', 'now') THEN grand_total ELSE 0 END), 0) as this_month_purchases,
+      COALESCE(SUM(CASE WHEN strftime('%Y-%m', invoice_date) = strftime('%Y-%m', 'now', '-1 month') THEN grand_total ELSE 0 END), 0) as prev_month_purchases,
+      COUNT(CASE WHEN balance_due > 0 AND due_date IS NOT NULL AND due_date < date('now') THEN 1 END) as overdue_invoices_count,
+      COUNT(CASE WHEN balance_due > 0 THEN 1 END) as unpaid_invoices_count,
+      (SELECT COUNT(*) FROM suppliers WHERE workshop_id = ? AND deleted_at IS NULL) as total_suppliers
     FROM purchase_invoices
     WHERE workshop_id = ? AND deleted_at IS NULL
-  `).get(workshopId) as any;
+  `).get(workshopId, workshopId) as any;
 
   return res.json({
     success: true,
@@ -602,6 +815,28 @@ export function createPurchaseInvoice(req: Request, res: Response) {
         invoice_image_url || null,
         userId
       );
+
+      // If initial payment was made with the invoice, record it in supplier_payments
+      if (paid > 0) {
+        const payNum = `PAY-SUP-${Date.now().toString().slice(-6)}`;
+        db.prepare(`
+          INSERT INTO supplier_payments (
+            id, workshop_id, payment_number, supplier_id, purchase_invoice_id,
+            amount, payment_method, payment_date, notes, created_by
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          uuidv4(),
+          workshopId,
+          payNum,
+          finalSupplierId,
+          invoiceId,
+          paid,
+          payment_method || 'cash',
+          invoice_date || new Date().toISOString().slice(0, 10),
+          `دفعة مسددة مع إصدار الفاتورة [${finalInvoiceNum}]`,
+          userId
+        );
+      }
 
       // 3. Insert items and update inventory stock
       for (const item of items) {
@@ -816,6 +1051,28 @@ export function recordSupplierPayment(req: Request, res: Response) {
     WHERE id = ? AND workshop_id = ?
   `).run(newPaid, newBalance, newStatus, payment_method || invoice.payment_method, id, workshopId);
 
+  // Record payment in supplier_payments
+  const payId = uuidv4();
+  const payNum = `PAY-SUP-${Date.now().toString().slice(-6)}`;
+  db.prepare(`
+    INSERT INTO supplier_payments (
+      id, workshop_id, payment_number, supplier_id, purchase_invoice_id,
+      amount, payment_method, reference_number, payment_date, notes, created_by
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    payId,
+    workshopId,
+    payNum,
+    invoice.supplier_id || 'general',
+    id,
+    actualPay,
+    payment_method || invoice.payment_method || 'cash',
+    req.body.reference_number || null,
+    req.body.payment_date || new Date().toISOString().slice(0, 10),
+    notes?.trim() || `سداد عن فاتورة مشتريات [${invoice.invoice_number}]`,
+    req.user?.id || 'admin'
+  );
+
   logActivity(req, 'PAYMENT', 'purchase_invoice', id, {
     invoice_number: invoice.invoice_number,
     amount_paid: actualPay,
@@ -861,6 +1118,36 @@ export function deletePurchaseInvoice(req: Request, res: Response) {
 
   try {
     const tx = db.transaction(() => {
+      // Revert inventory stock for parts that were updated by this invoice
+      const items = db.prepare(`SELECT part_id, quantity, update_inventory FROM purchase_invoice_items WHERE purchase_invoice_id = ?`).all(id) as any[];
+      for (const item of items) {
+        if (item.update_inventory === 1 && item.part_id) {
+          db.prepare(`
+            UPDATE parts 
+            SET stock_quantity = MAX(0, stock_quantity - ?),
+                updated_at = CURRENT_TIMESTAMP
+            WHERE id = ? AND workshop_id = ?
+          `).run(item.quantity, item.part_id, workshopId);
+
+          const movementId = uuidv4();
+          db.prepare(`
+            INSERT INTO stock_movements (
+              id, workshop_id, part_id, movement_type, quantity,
+              unit_cost, unit_price, reference_type, reference_id, notes, created_by
+            ) VALUES (?, ?, ?, 'return', ?, 0, 0, 'purchase_invoice', ?, ?, ?)
+          `).run(
+            movementId,
+            workshopId,
+            item.part_id,
+            -item.quantity,
+            id,
+            `استرجاع مخزون بسبب إلغاء فاتورة المشتريات [${invoice.invoice_number}]`,
+            req.user?.id || 'admin'
+          );
+        }
+      }
+
+      db.prepare(`DELETE FROM supplier_payments WHERE purchase_invoice_id = ?`).run(id);
       db.prepare(`DELETE FROM purchase_invoice_items WHERE purchase_invoice_id = ?`).run(id);
       db.prepare(`DELETE FROM purchase_invoices WHERE id = ? AND workshop_id = ?`).run(id, workshopId);
     });
@@ -878,9 +1165,62 @@ export function deletePurchaseInvoice(req: Request, res: Response) {
       originUserId: req.user?.id
     });
 
-    return res.json({ success: true, message: 'تم حذف فاتورة المورد بنجاح' });
+    broadcastEvent({
+      workshopId,
+      entity: 'inventory',
+      entityId: 'all',
+      action: 'UPDATE',
+      payload: { reason: 'purchase_invoice_deleted' },
+      originUserId: req.user?.id
+    });
+
+    return res.json({ success: true, message: 'تم حذف فاتورة المشتريات واسترجاع المخزون بنجاح' });
   } catch (err: any) {
     console.error('Delete purchase invoice error:', err);
     return res.status(500).json({ success: false, error: 'فشل في حذف فاتورة المورد: ' + err.message });
   }
+}
+
+/**
+ * Update an existing purchase invoice
+ */
+export function updatePurchaseInvoice(req: Request, res: Response) {
+  const workshopId = req.user?.workshop_id || 'ws_default_01';
+  const { id } = req.params;
+  const { notes, due_date, payment_method, invoice_number } = req.body;
+
+  const invoice = db.prepare(`SELECT * FROM purchase_invoices WHERE id = ? AND workshop_id = ? AND deleted_at IS NULL`).get(id, workshopId) as any;
+  if (!invoice) {
+    return res.status(404).json({ success: false, error: 'فاتورة المشتريات غير موجودة' });
+  }
+
+  db.prepare(`
+    UPDATE purchase_invoices
+    SET notes = COALESCE(?, notes),
+        due_date = ?,
+        payment_method = COALESCE(?, payment_method),
+        invoice_number = COALESCE(?, invoice_number),
+        updated_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND workshop_id = ?
+  `).run(
+    notes !== undefined ? notes?.trim() || null : invoice.notes,
+    due_date !== undefined ? due_date || null : invoice.due_date,
+    payment_method || invoice.payment_method,
+    invoice_number?.trim() || invoice.invoice_number,
+    id,
+    workshopId
+  );
+
+  logActivity(req, 'UPDATE', 'purchase_invoice', id, { invoice_number: invoice.invoice_number });
+
+  broadcastEvent({
+    workshopId,
+    entity: 'purchases',
+    entityId: id,
+    action: 'UPDATE',
+    payload: { id },
+    originUserId: req.user?.id
+  });
+
+  return res.json({ success: true, message: 'تم تحديث بيانات فاتورة المشتريات بنجاح' });
 }

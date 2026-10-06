@@ -272,14 +272,17 @@ export const api = {
   resetDemoData: () => request<any>('/backup/reset-data', { method: 'POST' }),
 
   // Suppliers & Purchases (الموردين والمشتريات)
-  getSuppliers: (params?: { search?: string; category?: string }) => {
+  getSuppliers: (params?: { search?: string; category?: string; status?: string }) => {
     const q = new URLSearchParams();
     if (params?.search) q.append('search', params.search);
     if (params?.category) q.append('category', params.category);
+    if (params?.status) q.append('status', params.status);
     const qs = q.toString();
     return request<any>(`/purchases/suppliers${qs ? `?${qs}` : ''}`);
   },
   getSupplierById: (id: string) => request<any>(`/purchases/suppliers/${id}`),
+  getSupplierPayments: (id: string) => request<any>(`/purchases/suppliers/${id}/payments`),
+  getSupplierLedger: (id: string) => request<any>(`/purchases/suppliers/${id}/ledger`),
   createSupplier: (data: any) => request<any>('/purchases/suppliers', {
     method: 'POST',
     body: JSON.stringify(data)
@@ -309,6 +312,10 @@ export const api = {
   getPurchaseInvoiceById: (id: string) => request<any>(`/purchases/${id}`),
   createPurchaseInvoice: (data: any) => request<any>('/purchases', {
     method: 'POST',
+    body: JSON.stringify(data)
+  }),
+  updatePurchaseInvoice: (id: string, data: any) => request<any>(`/purchases/${id}`, {
+    method: 'PUT',
     body: JSON.stringify(data)
   }),
   recordSupplierPayment: (invoiceId: string, data: { amount: number; payment_method?: string; notes?: string }) => request<any>(`/purchases/${invoiceId}/payments`, {
