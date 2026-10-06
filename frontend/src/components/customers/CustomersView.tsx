@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Plus, User, Phone, MapPin, Car, Receipt, Calendar, X, Eye, Trash2, CheckCircle2 } from 'lucide-react';
+import { Search, Plus, User, Phone, MapPin, Car, Receipt, Calendar, X, Eye, Trash2, CheckCircle2, Pencil } from 'lucide-react';
 import { api } from '../../services/api';
 import { Customer } from '../../types';
 import { useSync } from '../../context/SyncContext';
@@ -37,6 +37,19 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ initialSearch, ini
     address: '',
     notes: ''
   });
+
+  // Customer Edit states
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+  const [editFormData, setEditFormData] = useState({
+    full_name: '',
+    phone: '',
+    phone_secondary: '',
+    email: '',
+    address: '',
+    notes: ''
+  });
+  const [editSubmitting, setEditSubmitting] = useState(false);
 
   // Vehicle states for creating customer with vehicle
   const [includeVehicle, setIncludeVehicle] = useState(true);
@@ -117,6 +130,43 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ initialSearch, ini
       loadCustomers();
     } catch (err: any) {
       alert(err.message);
+    }
+  };
+
+  const handleOpenEdit = (customer: Customer) => {
+    setEditingCustomer(customer);
+    setEditFormData({
+      full_name: customer.full_name || '',
+      phone: customer.phone || '',
+      phone_secondary: customer.phone_secondary || '',
+      email: customer.email || '',
+      address: customer.address || '',
+      notes: customer.notes || ''
+    });
+    setShowEditModal(true);
+  };
+
+  const handleUpdateCustomer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingCustomer) return;
+    if (!editFormData.full_name.trim() || !editFormData.phone.trim()) {
+      alert('الاسم ورقم الهاتف الأساسي حقول إلزامية');
+      return;
+    }
+
+    setEditSubmitting(true);
+    try {
+      await api.updateCustomer(editingCustomer.id, editFormData);
+      setShowEditModal(false);
+      setEditingCustomer(null);
+      loadCustomers();
+      if (selectedCustomer && selectedCustomer.id === editingCustomer.id) {
+        handleOpenDetail(editingCustomer.id);
+      }
+    } catch (err: any) {
+      alert(err.message || 'فشل تحديث بيانات العميل');
+    } finally {
+      setEditSubmitting(false);
     }
   };
 
@@ -274,15 +324,22 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ initialSearch, ini
                     <td className="py-3 px-4 text-center">
                       <div className="flex items-center justify-center gap-1.5">
                         <button
+                          onClick={() => handleOpenEdit(c)}
+                          className="p-1.5 bg-slate-800 hover:bg-amber-600/20 hover:text-amber-400 text-slate-300 rounded-lg transition-colors cursor-pointer"
+                          title="تعديل بيانات العميل"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
                           onClick={() => handleOpenDetail(c.id)}
-                          className="p-1.5 bg-slate-800 hover:bg-sky-600/20 hover:text-sky-400 text-slate-300 rounded-lg transition-colors"
+                          className="p-1.5 bg-slate-800 hover:bg-sky-600/20 hover:text-sky-400 text-slate-300 rounded-lg transition-colors cursor-pointer"
                           title="عرض الملف الشامل"
                         >
                           <Eye className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleDeleteCustomer(c.id, c.full_name)}
-                          className="p-1.5 bg-slate-800 hover:bg-rose-600/20 hover:text-rose-400 text-slate-400 rounded-lg transition-colors"
+                          className="p-1.5 bg-slate-800 hover:bg-rose-600/20 hover:text-rose-400 text-slate-400 rounded-lg transition-colors cursor-pointer"
                           title="حذف العميل وسجلاته"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -522,6 +579,129 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ initialSearch, ini
         </div>
       )}
 
+      {/* Edit Customer Modal */}
+      {showEditModal && editingCustomer && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg flex flex-col overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-150">
+            <div className="p-4 border-b border-slate-800 flex items-center justify-between shrink-0 bg-slate-950/60">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                  <Pencil className="w-4 h-4" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-bold text-base text-white">تعديل بيانات العميل</h3>
+                    <span className="font-mono text-xs font-bold text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded border border-sky-500/20">
+                      {editingCustomer.customer_code}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-400">تحديث الاسم وأرقام التواصل والعنوان والملاحظات</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => { setShowEditModal(false); setEditingCustomer(null); }}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateCustomer} className="p-5 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">الاسم الكامل *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="اسم العميل..."
+                  value={editFormData.full_name}
+                  onChange={(e) => setEditFormData({ ...editFormData, full_name: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">رقم الهاتف الأساسي *</label>
+                  <input
+                    type="tel"
+                    required
+                    placeholder="رقم الهاتف"
+                    value={editFormData.phone}
+                    onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-amber-500 font-mono"
+                    dir="ltr"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">هاتف إضافي (اختياري)</label>
+                  <input
+                    type="tel"
+                    placeholder="رقم هاتف آخر أو واتساب"
+                    value={editFormData.phone_secondary}
+                    onChange={(e) => setEditFormData({ ...editFormData, phone_secondary: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-amber-500 font-mono"
+                    dir="ltr"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">البريد الإلكتروني (اختياري)</label>
+                <input
+                  type="email"
+                  placeholder="example@domain.com"
+                  value={editFormData.email}
+                  onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-amber-500 font-mono"
+                  dir="ltr"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">العنوان أو المنطقة</label>
+                <input
+                  type="text"
+                  placeholder="العنوان أو الحي أو المدينة..."
+                  value={editFormData.address}
+                  onChange={(e) => setEditFormData({ ...editFormData, address: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">ملاحظات خاصة بالعميل</label>
+                <textarea
+                  rows={2}
+                  placeholder="أي ملاحظات أو تفضيلات للعميل..."
+                  value={editFormData.notes}
+                  onChange={(e) => setEditFormData({ ...editFormData, notes: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-amber-500 resize-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => { setShowEditModal(false); setEditingCustomer(null); }}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  disabled={editSubmitting}
+                  className="bg-amber-600 hover:bg-amber-500 text-white px-5 py-2.5 rounded-xl text-xs font-bold shadow-lg shadow-amber-600/20 disabled:opacity-50 flex items-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  <span>{editSubmitting ? 'جاري حفظ التعديلات...' : 'حفظ التعديلات'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Customer Detail Drawer */}
       {selectedCustomer && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex justify-end">
@@ -538,8 +718,16 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ initialSearch, ini
               </div>
               <div className="flex items-center gap-2">
                 <button
+                  onClick={() => handleOpenEdit(selectedCustomer)}
+                  className="p-1.5 bg-amber-500/10 hover:bg-amber-500 text-amber-400 hover:text-white rounded-lg transition-colors border border-amber-500/20 text-xs flex items-center gap-1 font-bold cursor-pointer"
+                  title="تعديل بيانات العميل"
+                >
+                  <Pencil className="w-4 h-4" />
+                  <span>تعديل</span>
+                </button>
+                <button
                   onClick={() => handleDeleteCustomer(selectedCustomer.id, selectedCustomer.full_name)}
-                  className="p-1.5 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white rounded-lg transition-colors border border-rose-500/20 text-xs flex items-center gap-1 font-bold"
+                  className="p-1.5 bg-rose-500/10 hover:bg-rose-500 text-rose-400 hover:text-white rounded-lg transition-colors border border-rose-500/20 text-xs flex items-center gap-1 font-bold cursor-pointer"
                   title="حذف هذا العميل"
                 >
                   <Trash2 className="w-4 h-4" />
