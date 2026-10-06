@@ -5,6 +5,7 @@ import {
   getVehicleTimeline,
   createVehicle,
   updateVehicle,
+  updateMaintenanceSchedule,
   transferOwnership,
   deleteVehicle
 } from './vehiclesController';
@@ -20,6 +21,7 @@ router.get('/:id', requirePermission('vehicles.view'), getVehicleById);
 router.get('/:id/timeline', requirePermission('vehicles.view'), getVehicleTimeline);
 router.post('/', requirePermission('vehicles.create'), createVehicle);
 router.put('/:id', requirePermission('vehicles.update'), updateVehicle);
+router.put('/:id/maintenance-schedule', requirePermission('vehicles.update'), updateMaintenanceSchedule);
 router.post('/:id/transfer-ownership', requirePermission('vehicles.update'), transferOwnership);
 router.delete('/:id', requireRole('owner', 'manager'), deleteVehicle);
 

@@ -14,7 +14,10 @@ import {
   History,
   Calendar,
   Gauge,
-  Trash2
+  Trash2,
+  Wrench,
+  AlertCircle,
+  CheckCircle2
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { Vehicle, Customer } from '../../types';
@@ -34,6 +37,8 @@ export const VehiclesView: React.FC<VehiclesViewProps> = ({ initialSearch, initi
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showTransferModal, setShowTransferModal] = useState(false);
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [vehicleForSchedule, setVehicleForSchedule] = useState<Vehicle | null>(null);
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [timelineData, setTimelineData] = useState<any | null>(null);
   const [timelineFilter, setTimelineFilter] = useState<string>('all');
@@ -51,7 +56,17 @@ export const VehiclesView: React.FC<VehiclesViewProps> = ({ initialSearch, initi
     transmission_type: 'أوتوماتيك',
     current_odometer: 0,
     current_owner_id: '',
+    last_maintenance_km: '',
+    next_maintenance_km: '',
+    next_maintenance_notes: '',
     notes: ''
+  });
+
+  const [scheduleData, setScheduleData] = useState({
+    last_maintenance_km: '',
+    next_maintenance_km: '',
+    next_maintenance_date: '',
+    next_maintenance_notes: ''
   });
 
   const [transferData, setTransferData] = useState({
@@ -130,6 +145,39 @@ export const VehiclesView: React.FC<VehiclesViewProps> = ({ initialSearch, initi
     }
   };
 
+  const handleOpenScheduleModal = (v: Vehicle) => {
+    setVehicleForSchedule(v);
+    const lastKm = v.last_maintenance_km || v.latest_visit_odometer || v.current_odometer || 0;
+    const nextKm = v.next_maintenance_km || (lastKm > 0 ? lastKm + 10000 : (v.current_odometer || 0) + 10000);
+    setScheduleData({
+      last_maintenance_km: String(v.last_maintenance_km || v.latest_visit_odometer || ''),
+      next_maintenance_km: String(v.next_maintenance_km || (nextKm || '')),
+      next_maintenance_date: v.next_maintenance_date ? v.next_maintenance_date.split('T')[0] : '',
+      next_maintenance_notes: v.next_maintenance_notes || ''
+    });
+    setShowScheduleModal(true);
+  };
+
+  const handleSaveSchedule = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!vehicleForSchedule) return;
+    setSubmitting(true);
+    try {
+      await api.updateMaintenanceSchedule(vehicleForSchedule.id, {
+        last_maintenance_km: scheduleData.last_maintenance_km ? parseInt(scheduleData.last_maintenance_km, 10) : null,
+        next_maintenance_km: scheduleData.next_maintenance_km ? parseInt(scheduleData.next_maintenance_km, 10) : null,
+        next_maintenance_date: scheduleData.next_maintenance_date || null,
+        next_maintenance_notes: scheduleData.next_maintenance_notes
+      });
+      setShowScheduleModal(false);
+      loadData();
+    } catch (err: any) {
+      alert(err.message || 'فشل حفظ جدول الصيانة');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const handleCreateVehicle = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.plate_number || !formData.make || !formData.model) {
@@ -163,7 +211,7 @@ export const VehiclesView: React.FC<VehiclesViewProps> = ({ initialSearch, initi
       setFormData({
         plate_number: '', vin: '', make: '', model: '', year: new Date().getFullYear(),
         color: '', fuel_type: 'بنزين', transmission_type: 'أوتوماتيك', current_odometer: 0,
-        current_owner_id: '', notes: ''
+        current_owner_id: '', last_maintenance_km: '', next_maintenance_km: '', next_maintenance_notes: '', notes: ''
       });
       setNewOwner({ full_name: '', phone: '', address: '' });
       setOwnerMode('existing');
@@ -236,61 +284,138 @@ export const VehiclesView: React.FC<VehiclesViewProps> = ({ initialSearch, initi
                 <tr>
                   <th className="py-3.5 px-4">رقم اللوحة</th>
                   <th className="py-3.5 px-4">السيارة</th>
-                  <th className="py-3.5 px-4">رقم الهيكل VIN</th>
                   <th className="py-3.5 px-4">المالك الحالي</th>
                   <th className="py-3.5 px-4">العداد الحالي</th>
+                  <th className="py-3.5 px-4">الصيانة الدورية (السابقة / القادمة)</th>
+                  <th className="py-3.5 px-4">مطلوب بالزيارة القادمة</th>
                   <th className="py-3.5 px-4">الزيارات</th>
-                  <th className="py-3.5 px-4 text-center">الإجراءات وتاريخ السيارة</th>
+                  <th className="py-3.5 px-4 text-center">الإجراءات</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
-                {vehicles.map((v) => (
-                  <tr key={v.id} className="hover:bg-slate-800/40 transition-colors">
-                    <td className="py-3 px-4 font-mono font-bold text-sky-400 bg-slate-950/40">{v.plate_number}</td>
-                    <td className="py-3 px-4 font-semibold text-slate-100">
-                      {v.make} {v.model} ({v.year})
-                    </td>
-                    <td className="py-3 px-4 text-slate-400 font-mono text-xs">{v.vin || '-'}</td>
-                    <td className="py-3 px-4 text-slate-300">{v.owner_name}</td>
-                    <td className="py-3 px-4 font-mono text-slate-300">{v.current_odometer.toLocaleString()} كم</td>
-                    <td className="py-3 px-4">
-                      <span className="bg-slate-800 px-2 py-0.5 rounded text-xs text-slate-300 font-mono">
-                        {v.visits_count || 0}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <div className="flex items-center justify-center gap-1.5">
-                        <button
-                          onClick={() => handleOpenTimeline(v)}
-                          className="flex items-center gap-1 bg-sky-500/10 hover:bg-sky-500 text-sky-400 hover:text-white px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border border-sky-500/20"
-                          title="عرض سجل وتاريخ السيارة الكامل للأحداث"
-                        >
-                          <History className="w-3.5 h-3.5" />
-                          <span>تاريخ السيارة</span>
-                        </button>
+                {vehicles.map((v) => {
+                  const diffKm = v.next_maintenance_km ? v.next_maintenance_km - (v.current_odometer || 0) : null;
+                  return (
+                    <tr key={v.id} className="hover:bg-slate-800/40 transition-colors">
+                      <td className="py-3 px-4 font-mono font-bold text-sky-400 bg-slate-950/40">{v.plate_number}</td>
+                      <td className="py-3 px-4 font-semibold text-slate-100">
+                        {v.make} {v.model} ({v.year})
+                        {v.vin && <div className="text-[11px] text-slate-500 font-mono mt-0.5">{v.vin}</div>}
+                      </td>
+                      <td className="py-3 px-4 text-slate-300">{v.owner_name}</td>
+                      <td className="py-3 px-4 font-mono font-bold text-slate-200">
+                        {v.current_odometer.toLocaleString()} كم
+                      </td>
+                      
+                      {/* الصيانة الدورية السابقة والقادمة ومتبقي العداد */}
+                      <td className="py-3 px-4">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1.5 text-xs">
+                            <span className="text-slate-400">السابقة:</span>
+                            <span className="font-mono text-slate-300">
+                              {v.last_maintenance_km ? `${v.last_maintenance_km.toLocaleString()} كم` : (v.latest_visit_odometer ? `${v.latest_visit_odometer.toLocaleString()} كم` : 'غير مسجل')}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1.5 text-xs">
+                            <span className="text-slate-400">القادمة:</span>
+                            <span className="font-mono font-bold text-amber-300">
+                              {v.next_maintenance_km ? `${v.next_maintenance_km.toLocaleString()} كم` : 'لم تحدد'}
+                            </span>
+                          </div>
+                          <div className="pt-0.5">
+                            {diffKm !== null ? (
+                              diffKm < 0 ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                                  <AlertCircle className="w-3 h-3 text-rose-400" />
+                                  متأخرة بـ {Math.abs(diffKm).toLocaleString()} كم
+                                </span>
+                              ) : diffKm === 0 ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-500/20 text-rose-300 border border-rose-500/30">
+                                  <AlertCircle className="w-3 h-3 text-rose-400" />
+                                  مستحقة الآن
+                                </span>
+                              ) : diffKm <= 1000 ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30 animate-pulse">
+                                  <Clock className="w-3 h-3 text-amber-400" />
+                                  قريباً (بعد {diffKm.toLocaleString()} كم)
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-medium bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                                  <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                                  متبقي {diffKm.toLocaleString()} كم
+                                </span>
+                              )
+                            ) : (
+                              <span className="text-[10px] text-slate-500 font-normal">لم يحدد عداد قادم</span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
 
-                        <button
-                          onClick={() => {
-                            setSelectedVehicle(v);
-                            setShowTransferModal(true);
-                          }}
-                          className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors"
-                          title="نقل ملكية السيارة لعميل آخر"
-                        >
-                          <UserCheck className="w-4 h-4" />
-                        </button>
+                      {/* مطلوب بالزيارة القادمة (ملاحظات الصيانة والعفشة) */}
+                      <td className="py-3 px-4">
+                        {v.next_maintenance_notes ? (
+                          <div className="flex items-start gap-1.5 max-w-[200px]" title={v.next_maintenance_notes}>
+                            <Wrench className="w-3.5 h-3.5 text-amber-400 shrink-0 mt-0.5" />
+                            <span className="text-xs text-amber-200 font-medium line-clamp-2 bg-amber-500/10 px-2 py-1 rounded-lg border border-amber-500/20">
+                              {v.next_maintenance_notes}
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-slate-500">لم تحدد أعمال</span>
+                        )}
+                      </td>
 
-                        <button
-                          onClick={() => handleDeleteVehicle(v.id, v.plate_number)}
-                          className="p-1.5 bg-slate-800 hover:bg-rose-600/20 hover:text-rose-400 text-slate-400 rounded-lg transition-colors"
-                          title="حذف السيارة وسجلاتها"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                      <td className="py-3 px-4">
+                        <span className="bg-slate-800 px-2 py-0.5 rounded text-xs text-slate-300 font-mono">
+                          {v.visits_count || 0}
+                        </span>
+                      </td>
+
+                      <td className="py-3 px-4 text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          {/* زر جدول الصيانة الدورية والخطة القادمة */}
+                          <button
+                            onClick={() => handleOpenScheduleModal(v)}
+                            className="flex items-center gap-1 bg-amber-500/10 hover:bg-amber-500 text-amber-400 hover:text-slate-950 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border border-amber-500/30"
+                            title="ضبط عداد الصيانة وتحديد الأعمال المطلوبة للزيارة القادمة"
+                          >
+                            <Wrench className="w-3.5 h-3.5" />
+                            <span>جدول الصيانة</span>
+                          </button>
+
+                          <button
+                            onClick={() => handleOpenTimeline(v)}
+                            className="flex items-center gap-1 bg-sky-500/10 hover:bg-sky-500 text-sky-400 hover:text-white px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border border-sky-500/20"
+                            title="عرض سجل وتاريخ السيارة الكامل للأحداث"
+                          >
+                            <History className="w-3.5 h-3.5" />
+                            <span>تاريخ السيارة</span>
+                          </button>
+
+                          <button
+                            onClick={() => {
+                              setSelectedVehicle(v);
+                              setShowTransferModal(true);
+                            }}
+                            className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg transition-colors"
+                            title="نقل ملكية السيارة لعميل آخر"
+                          >
+                            <UserCheck className="w-4 h-4" />
+                          </button>
+
+                          <button
+                            onClick={() => handleDeleteVehicle(v.id, v.plate_number)}
+                            className="p-1.5 bg-slate-800 hover:bg-rose-600/20 hover:text-rose-400 text-slate-400 rounded-lg transition-colors"
+                            title="حذف السيارة وسجلاتها"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -495,6 +620,54 @@ export const VehiclesView: React.FC<VehiclesViewProps> = ({ initialSearch, initi
                 )}
               </div>
 
+              {/* جدول وملاحظات الصيانة الدورية عند التسجيل */}
+              <div className="bg-slate-950/80 p-3.5 rounded-2xl border border-slate-800 space-y-3">
+                <div className="flex items-center gap-2 text-xs font-bold text-amber-400">
+                  <Wrench className="w-4 h-4" />
+                  <span>جدول الصيانة الدورية وتخطيط الزيارة (اختياري)</span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">
+                      آخر صيانة دورية تمت عند عداد (كم)
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="مثال: 40000"
+                      value={formData.last_maintenance_km}
+                      onChange={(e) => setFormData({ ...formData, last_maintenance_km: e.target.value })}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-amber-500 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1">
+                      الصيانة القادمة مستحقة عند عداد (كم)
+                    </label>
+                    <input
+                      type="number"
+                      placeholder="مثال: 50000"
+                      value={formData.next_maintenance_km}
+                      onChange={(e) => setFormData({ ...formData, next_maintenance_km: e.target.value })}
+                      className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-amber-500 font-mono"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    الأعمال المطلوبة في الزيارة القادمة (خطة الصيانة)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="مثال: صيانة دورية وتغيير زيت، وتغيير عفشة، وفحص فرامل..."
+                    value={formData.next_maintenance_notes}
+                    onChange={(e) => setFormData({ ...formData, next_maintenance_notes: e.target.value })}
+                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
                 <button
                   type="button"
@@ -575,6 +748,164 @@ export const VehiclesView: React.FC<VehiclesViewProps> = ({ initialSearch, initi
                   className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2 rounded-xl text-xs font-bold shadow-lg shadow-emerald-600/20 disabled:opacity-50"
                 >
                   {submitting ? 'جاري التنفيذ...' : 'تأكيد نقل الملكية'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Maintenance Schedule & Next Visit Planning Modal */}
+      {showScheduleModal && vehicleForSchedule && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150">
+            <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                  <Wrench className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-white">جدولة وخطة الصيانة الدورية</h3>
+                  <p className="text-xs text-slate-400">
+                    {vehicleForSchedule.make} {vehicleForSchedule.model} ({vehicleForSchedule.plate_number})
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setShowScheduleModal(false)} className="text-slate-400 hover:text-white">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveSchedule} className="p-5 space-y-4">
+              {/* Odometer Banner */}
+              <div className="bg-slate-950/80 border border-slate-800 p-3.5 rounded-xl flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Gauge className="w-4 h-4 text-sky-400" />
+                  <span className="text-xs text-slate-300 font-medium">العداد الحالي للمركبة:</span>
+                </div>
+                <span className="font-mono text-sm font-bold text-sky-400">
+                  {vehicleForSchedule.current_odometer.toLocaleString()} كم
+                </span>
+              </div>
+
+              {/* Maintenance Odometers */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    آخر صيانة دورية تمت عند عداد (كم)
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="مثال: 10000"
+                    value={scheduleData.last_maintenance_km}
+                    onChange={(e) => setScheduleData({ ...scheduleData, last_maintenance_km: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500 font-mono"
+                  />
+                  <div className="text-[11px] text-slate-500 mt-1">عداد الزيارة أو الصيانة السابقة</div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    الصيانة القادمة مستحقة عند عداد (كم) *
+                  </label>
+                  <input
+                    type="number"
+                    placeholder="مثال: 20000"
+                    value={scheduleData.next_maintenance_km}
+                    onChange={(e) => setScheduleData({ ...scheduleData, next_maintenance_km: e.target.value })}
+                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500 font-mono font-bold text-amber-300"
+                  />
+                  {/* Quick increment buttons */}
+                  <div className="flex items-center gap-1.5 mt-1.5">
+                    <span className="text-[11px] text-slate-500">زيادة سريعة:</span>
+                    {[5000, 10000, 15000].map((inc) => (
+                      <button
+                        key={inc}
+                        type="button"
+                        onClick={() => {
+                          const base = parseInt(scheduleData.last_maintenance_km, 10) || vehicleForSchedule.current_odometer || 0;
+                          setScheduleData({ ...scheduleData, next_maintenance_km: String(base + inc) });
+                        }}
+                        className="px-1.5 py-0.5 rounded text-[10px] font-mono bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition-colors"
+                      >
+                        +{inc / 1000}k
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Next maintenance date (optional) */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  تاريخ الصيانة القادمة التقريبي (اختياري)
+                </label>
+                <input
+                  type="date"
+                  value={scheduleData.next_maintenance_date}
+                  onChange={(e) => setScheduleData({ ...scheduleData, next_maintenance_date: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-amber-500 font-mono"
+                />
+              </div>
+
+              {/* Planned Next Visit Services / Repairs (العفشة والصيانة وغيرها) */}
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  الأعمال والقطع المطلوبة في الزيارة القادمة (خطة الصيانة)
+                </label>
+                <textarea
+                  rows={3}
+                  placeholder="مثال: صيانة دورية وتغيير زيت وفلتر، وتغيير مساعدين وتربيط عفشة، وفحص تيل الفرامل..."
+                  value={scheduleData.next_maintenance_notes}
+                  onChange={(e) => setScheduleData({ ...scheduleData, next_maintenance_notes: e.target.value })}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs sm:text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-amber-500 leading-relaxed"
+                />
+
+                {/* Quick Service Suggestions */}
+                <div className="mt-2 space-y-1">
+                  <span className="text-[11px] text-slate-400">إضافة بنود شائعة بنقرة واحدة:</span>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      'صيانة دورية وتغيير زيت وفلاتر',
+                      'تغيير عفشة ومساعدين',
+                      'تربيط عفشة وضبط زوايا',
+                      'تغيير تيل فرامل وطنابير',
+                      'تغيير سير كاتينة وبوجيهات',
+                      'فحص شامل للسيارة'
+                    ].map((item) => (
+                      <button
+                        key={item}
+                        type="button"
+                        onClick={() => {
+                          const current = scheduleData.next_maintenance_notes ? scheduleData.next_maintenance_notes.trim() : '';
+                          if (current.includes(item)) return;
+                          const updated = current ? `${current} + ${item}` : item;
+                          setScheduleData({ ...scheduleData, next_maintenance_notes: updated });
+                        }}
+                        className="text-[10px] bg-slate-800/80 hover:bg-amber-500/20 hover:text-amber-300 hover:border-amber-500/30 text-slate-300 px-2 py-1 rounded-lg border border-slate-700 transition-colors"
+                      >
+                        + {item}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowScheduleModal(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800"
+                >
+                  إلغاء
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="bg-amber-500 hover:bg-amber-400 text-slate-950 px-5 py-2 rounded-xl text-xs font-bold shadow-lg shadow-amber-500/20 disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <Wrench className="w-3.5 h-3.5" />
+                  <span>{submitting ? 'جاري الحفظ...' : 'حفظ جدول وخطة الصيانة'}</span>
                 </button>
               </div>
             </form>

@@ -113,6 +113,8 @@ export const api = {
     request<any>('/vehicles', { method: 'POST', body: JSON.stringify(data) }),
   updateVehicle: (id: string, data: any) =>
     request<any>(`/vehicles/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  updateMaintenanceSchedule: (id: string, data: any) =>
+    request<any>(`/vehicles/${id}/maintenance-schedule`, { method: 'PUT', body: JSON.stringify(data) }),
   transferOwnership: (id: string, data: any) =>
     request<any>(`/vehicles/${id}/transfer-ownership`, { method: 'POST', body: JSON.stringify(data) }),
   deleteVehicle: (id: string) =>

@@ -15,7 +15,8 @@ export function getVehicles(req: Request, res: Response) {
       c.full_name as owner_name,
       c.phone as owner_phone,
       c.customer_code as owner_code,
-      COUNT(DISTINCT vis.id) as visits_count
+      COUNT(DISTINCT vis.id) as visits_count,
+      MAX(vis.odometer_in) as latest_visit_odometer
     FROM vehicles v
     JOIN customers c ON v.current_owner_id = c.id
     LEFT JOIN visits vis ON vis.vehicle_id = v.id
@@ -326,6 +327,7 @@ export function createVehicle(req: Request, res: Response) {
     plate_number, vin, make, model, year, color,
     engine_number, engine_capacity, fuel_type, transmission_type,
     current_odometer, current_owner_id, notes,
+    last_maintenance_km, next_maintenance_km, next_maintenance_date, next_maintenance_notes,
     new_customer, owner_name, owner_phone, owner_address
   } = req.body;
 
@@ -410,8 +412,9 @@ export function createVehicle(req: Request, res: Response) {
     INSERT INTO vehicles (
       id, workshop_id, plate_number, vin, make, model, year, color,
       engine_number, engine_capacity, fuel_type, transmission_type,
-      current_odometer, current_owner_id, notes
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      current_odometer, current_owner_id, notes,
+      last_maintenance_km, next_maintenance_km, next_maintenance_date, next_maintenance_notes
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     vehicleId,
     workshopId,
@@ -427,7 +430,11 @@ export function createVehicle(req: Request, res: Response) {
     transmission_type || 'أوتوماتيك',
     parseInt(current_odometer || 0, 10),
     ownerId,
-    notes?.trim() || null
+    notes?.trim() || null,
+    last_maintenance_km ? parseInt(last_maintenance_km, 10) : null,
+    next_maintenance_km ? parseInt(next_maintenance_km, 10) : null,
+    next_maintenance_date || null,
+    next_maintenance_notes?.trim() || null
   );
 
   logActivity(req, 'CREATE', 'vehicle', vehicleId, { plate_number, make, model, year });
@@ -455,7 +462,8 @@ export function updateVehicle(req: Request, res: Response) {
   const {
     plate_number, vin, make, model, year, color,
     engine_number, engine_capacity, fuel_type, transmission_type,
-    current_odometer, notes
+    current_odometer, notes,
+    last_maintenance_km, next_maintenance_km, next_maintenance_date, next_maintenance_notes
   } = req.body;
 
   const existing = db.prepare('SELECT id FROM vehicles WHERE id = ? AND workshop_id = ? AND deleted_at IS NULL').get(id, workshopId);
@@ -467,7 +475,12 @@ export function updateVehicle(req: Request, res: Response) {
     UPDATE vehicles SET
       plate_number = ?, vin = ?, make = ?, model = ?, year = ?, color = ?,
       engine_number = ?, engine_capacity = ?, fuel_type = ?, transmission_type = ?,
-      current_odometer = ?, notes = ?, updated_at = CURRENT_TIMESTAMP
+      current_odometer = ?, notes = ?,
+      last_maintenance_km = COALESCE(?, last_maintenance_km),
+      next_maintenance_km = COALESCE(?, next_maintenance_km),
+      next_maintenance_date = COALESCE(?, next_maintenance_date),
+      next_maintenance_notes = COALESCE(?, next_maintenance_notes),
+      updated_at = CURRENT_TIMESTAMP
     WHERE id = ? AND workshop_id = ?
   `).run(
     plate_number.trim(),
@@ -482,6 +495,10 @@ export function updateVehicle(req: Request, res: Response) {
     transmission_type || 'أوتوماتيك',
     parseInt(current_odometer || 0, 10),
     notes?.trim() || null,
+    last_maintenance_km !== undefined ? (last_maintenance_km ? parseInt(last_maintenance_km, 10) : null) : null,
+    next_maintenance_km !== undefined ? (next_maintenance_km ? parseInt(next_maintenance_km, 10) : null) : null,
+    next_maintenance_date !== undefined ? (next_maintenance_date || null) : null,
+    next_maintenance_notes !== undefined ? (next_maintenance_notes?.trim() || null) : null,
     id,
     workshopId
   );
@@ -498,6 +515,60 @@ export function updateVehicle(req: Request, res: Response) {
 
   return res.json({ success: true, message: 'تم تحديث بيانات السيارة بنجاح' });
 }
+
+export function updateMaintenanceSchedule(req: Request, res: Response) {
+  const workshopId = req.user?.workshop_id || 'ws_default_01';
+  const { id } = req.params;
+  const { last_maintenance_km, next_maintenance_km, next_maintenance_date, next_maintenance_notes } = req.body;
+
+  const vehicle = db.prepare('SELECT id, plate_number, make, model FROM vehicles WHERE id = ? AND workshop_id = ? AND deleted_at IS NULL').get(id, workshopId) as any;
+  if (!vehicle) {
+    return res.status(404).json({ success: false, error: 'السيارة غير موجودة' });
+  }
+
+  const lastKm = last_maintenance_km !== undefined && last_maintenance_km !== '' && last_maintenance_km !== null
+    ? parseInt(last_maintenance_km, 10) : null;
+  const nextKm = next_maintenance_km !== undefined && next_maintenance_km !== '' && next_maintenance_km !== null
+    ? parseInt(next_maintenance_km, 10) : null;
+  const nextDate = next_maintenance_date || null;
+  const nextNotes = next_maintenance_notes !== undefined ? (next_maintenance_notes?.trim() || null) : null;
+
+  db.prepare(`
+    UPDATE vehicles SET
+      last_maintenance_km = ?,
+      next_maintenance_km = ?,
+      next_maintenance_date = ?,
+      next_maintenance_notes = ?,
+      updated_at = CURRENT_TIMESTAMP
+    WHERE id = ? AND workshop_id = ?
+  `).run(
+    lastKm,
+    nextKm,
+    nextDate,
+    nextNotes,
+    id,
+    workshopId
+  );
+
+  logActivity(req, 'UPDATE', 'vehicle', id, {
+    plate_number: vehicle.plate_number,
+    action: 'تحديث خطة وجدول الصيانة القادمة',
+    next_maintenance_km: nextKm,
+    next_maintenance_notes: nextNotes
+  });
+
+  broadcastEvent({
+    workshopId,
+    entity: 'vehicles',
+    entityId: id,
+    action: 'UPDATE',
+    payload: { id, last_maintenance_km: lastKm, next_maintenance_km: nextKm, next_maintenance_notes: nextNotes },
+    originUserId: req.user?.id
+  });
+
+  return res.json({ success: true, message: 'تم تحديث خطة الصيانة القادمة للسيارة بنجاح' });
+}
+
 
 /**
  * Transfer vehicle ownership with historical retention

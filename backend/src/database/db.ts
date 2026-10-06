@@ -41,6 +41,8 @@ export function initDatabase() {
   try { db.exec('ALTER TABLE purchase_invoices ADD COLUMN discount_amount REAL DEFAULT 0.0'); } catch (e) {}
   try { db.exec('ALTER TABLE purchase_invoice_items ADD COLUMN discount REAL DEFAULT 0.0'); } catch (e) {}
   try { db.exec('ALTER TABLE purchase_invoice_items ADD COLUMN sku TEXT NULL'); } catch (e) {}
+  try { db.exec('ALTER TABLE vehicles ADD COLUMN last_maintenance_km INTEGER NULL'); } catch (e) {}
+  try { db.exec('ALTER TABLE vehicles ADD COLUMN next_maintenance_notes TEXT NULL'); } catch (e) {}
   try {
     db.exec(`
       CREATE TABLE IF NOT EXISTS supplier_payments (

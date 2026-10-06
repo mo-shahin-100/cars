@@ -50,8 +50,11 @@ export interface Vehicle {
   first_visit_at?: string;
   last_visit_at?: string;
   total_spent?: number;
+  last_maintenance_km?: number;
   next_maintenance_date?: string;
   next_maintenance_km?: number;
+  next_maintenance_notes?: string;
+  latest_visit_odometer?: number;
   visits_count?: number;
   created_at: string;
 }
