@@ -136,19 +136,41 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onQuic
           <Car className="w-4 h-4 text-sky-500" />
           حالة السيارات جوة الورشة
         </h3>
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {[
-            { label: 'إجمالي السيارات',    value: vStats.total_in_workshop, valCls: isDark ? 'text-white' : 'text-slate-900',   sub: 'داخل الورشة الآن',   subCls: 'text-sky-500' },
-            { label: 'استلام وفحص أولي',   value: vStats.received_count,    valCls: isDark ? 'text-slate-100' : 'text-slate-700', sub: 'بانتظار الفحص',      subCls: labelCls },
-            { label: 'قيد فحص الكمبيوتر', value: vStats.diagnosing_count,  valCls: 'text-purple-500',                            sub: 'تشخيص وأعطال',      subCls: 'text-purple-500' },
-            { label: 'قيد الإصلاح والميكانيكا', value: vStats.in_repair_count, valCls: 'text-amber-500',                         sub: 'تحت يد الفنيين',    subCls: 'text-amber-500' },
-            { label: 'انتظار قطع غيار',   value: vStats.waiting_parts_count, valCls: 'text-rose-500',                            sub: 'متوقفة للقطع',      subCls: 'text-rose-500' },
-            { label: 'جاهزة للتسليم',     value: vStats.ready_count,       valCls: 'text-emerald-500',                           sub: 'جاهزة للعميل',      subCls: 'text-emerald-500' },
-          ].map(({ label, value, valCls, sub, subCls }) => (
-            <div key={label} className="glass-card p-4 rounded-2xl">
-              <p className={`text-xs font-bold ${labelCls}`}>{label}</p>
-              <p className={`text-3xl font-black mt-1.5 tracking-tight ${valCls}`}>{value}</p>
-              <span className={`inline-block mt-1 text-[11px] font-bold ${subCls}`}>{sub}</span>
+            {
+              label: 'إجمالي السيارات',
+              value: vStats.total_in_workshop,
+              valCls: isDark ? 'text-white' : 'text-slate-900',
+              sub: 'داخل الورشة الآن',
+              subCls: 'text-sky-400',
+              borderCls: 'border-sky-500/20'
+            },
+            {
+              label: 'صيانة',
+              value: Math.max(0, (vStats.in_repair_count || 0) + (vStats.diagnosing_count || 0) + (vStats.waiting_parts_count || 0) + (vStats.received_count || 0)),
+              valCls: 'text-amber-400',
+              sub: 'تحت الفحص والإصلاح',
+              subCls: 'text-amber-400',
+              borderCls: 'border-amber-500/20'
+            },
+            {
+              label: 'جاهز للتسليم',
+              value: vStats.ready_count,
+              valCls: 'text-emerald-400',
+              sub: 'جاهزة للعميل',
+              subCls: 'text-emerald-400',
+              borderCls: 'border-emerald-500/20'
+            },
+          ].map(({ label, value, valCls, sub, subCls, borderCls }) => (
+            <div key={label} className={`glass-card p-5 rounded-2xl border ${borderCls} flex flex-col justify-between shadow-sm`}>
+              <div className="flex items-center justify-between">
+                <p className={`text-sm font-bold ${labelCls}`}>{label}</p>
+                <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${isDark ? 'bg-slate-800/80' : 'bg-slate-100'} ${subCls}`}>
+                  {sub}
+                </span>
+              </div>
+              <p className={`text-3xl sm:text-4xl font-black mt-2 tracking-tight ${valCls}`}>{value}</p>
             </div>
           ))}
         </div>
