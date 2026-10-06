@@ -185,16 +185,111 @@ export function handleDemoRequest(endpoint: string, options: RequestInit = {}): 
 
   // 10. Reports / Dashboard
   if (endpoint.startsWith('/reports/dashboard')) {
+    const visits = [
+      {
+        id: 'vis1',
+        visit_number: 'V-00001',
+        status: 'in_repair',
+        entry_datetime: '2026-10-06T09:15:00Z',
+        customer_complaint: 'صيانة دورية وتغيير زيت وفحص عفشة',
+        vehicle_id: 'v1',
+        plate_number: 'أ ب ج 1 2 3',
+        make: 'Toyota',
+        model: 'Corolla',
+        year: 2021,
+        customer_name: 'أحمد محمود رضوان',
+        customer_phone: '01012345678',
+        work_order_id: 'wo1',
+        work_order_desc: 'صيانة دورية شاملة 60,000 كم وفحص العفشة',
+        total_cost: 2150,
+        tasks: [
+          { id: 't1', title: 'تغيير زيت المحرك والفلتر وفحص السيور', price: 200, status: 'completed', mechanic_name: 'الأسطى أحمد' },
+          { id: 't2', title: 'فحص دورة الفرامل وتغيير الفحمات وتجربة الطريق', price: 250, status: 'in_progress', mechanic_name: 'الأسطى أحمد' }
+        ],
+        usedParts: [
+          { id: 'up1', part_name: 'زيت محرك موبيل وان 5W-30 (4 لتر)', quantity: 1, unit_price: 1350, total_price: 1350 },
+          { id: 'up2', part_name: 'فلتر زيت تويوتا أصلي', quantity: 1, unit_price: 350, total_price: 350 }
+        ]
+      },
+      {
+        id: 'vis2',
+        visit_number: 'V-00002',
+        status: 'ready',
+        entry_datetime: '2026-10-05T14:30:00Z',
+        customer_complaint: 'صوت خشونة بالفرامل وفحص كمبيوتر للمحرك',
+        vehicle_id: 'v2',
+        plate_number: 'س ص ع 4 5 6',
+        make: 'Hyundai',
+        model: 'Tucson',
+        year: 2022,
+        customer_name: 'خالد عبد الله المنشاوي',
+        customer_phone: '01123456789',
+        work_order_id: 'wo2',
+        work_order_desc: 'فحص كمبيوتر وتغيير فحمات فرامل أمامية أصلية',
+        invoice_id: 'inv_ready_01',
+        invoice_number: 'INV-2026-088',
+        invoice_total: 1650,
+        total_cost: 1650,
+        tasks: [
+          { id: 't3', title: 'فحص كمبيوتر مسح أعطال DTC', price: 250, status: 'completed', mechanic_name: 'م. محمود' },
+          { id: 't4', title: 'خرط طنابير وتركيب فحمات فرامل وضبط ABS', price: 400, status: 'completed', mechanic_name: 'الأسطى أحمد' }
+        ],
+        usedParts: [
+          { id: 'up3', part_name: 'طقم تيل فرامل بريمبو سيراميك', quantity: 1, unit_price: 1000, total_price: 1000 }
+        ]
+      },
+      {
+        id: 'vis3',
+        visit_number: 'V-00003',
+        status: 'diagnosing',
+        entry_datetime: '2026-10-06T10:20:00Z',
+        customer_complaint: 'عمرة موتور - تقطيع وضعف عزم وظهور لمبة المحرك Check Engine',
+        vehicle_id: 'v3',
+        plate_number: 'ط ك ل 7 8 9',
+        make: 'Mercedes-Benz',
+        model: 'C200',
+        year: 2020,
+        customer_name: 'م. مصطفى الشريف',
+        customer_phone: '01234567890',
+        work_order_id: 'wo3',
+        work_order_desc: 'فحص ضغط البساتم واختبار تسريب الصبابات وتغيير بوجيهات',
+        total_cost: 3800,
+        tasks: [
+          { id: 't5', title: 'تشخيص كمبيوتر متقدم واختبار حساسات الوقود', price: 400, status: 'in_progress', mechanic_name: 'م. محمود' },
+          { id: 't6', title: 'فك وفحص البوجيهات والكويلات وكشف ضغط السلندر', price: 600, status: 'in_progress', mechanic_name: 'الأسطى أحمد' }
+        ],
+        usedParts: [
+          { id: 'up4', part_name: 'طقم بوجيهات إيريديوم NGK ليزر أصلي (4 شمعات)', quantity: 1, unit_price: 1400, total_price: 1400 },
+          { id: 'up5', part_name: 'سائل تنظيف دورة الوقود والبخاخات Liqui Moly', quantity: 1, unit_price: 400, total_price: 400 }
+        ]
+      }
+    ];
+
     return {
       success: true,
       data: {
-        active_visits_count: db.visits.length,
-        today_completed_count: 3,
-        total_monthly_revenue: 48500,
-        pending_invoices_count: 2,
-        low_stock_count: db.inventory.filter((i) => i.quantity <= i.min_quantity).length,
-        revenue_today: 3200,
-        technicians_working: 3
+        vehicles: {
+          total_in_workshop: 3,
+          in_repair_count: 1,
+          diagnosing_count: 1,
+          waiting_parts_count: 0,
+          ready_count: 1,
+          received_count: 0
+        },
+        financials: {
+          total_invoiced: 48500,
+          total_collected: 36200,
+          total_outstanding: 12300,
+          total_expenses: 1800,
+          net_collected_profit: 34400
+        },
+        tasks: {
+          tasks_in_progress: 3,
+          tasks_pending: 1,
+          tasks_completed: 6
+        },
+        lowStockAlerts: 1,
+        recentVisits: visits
       }
     };
   }

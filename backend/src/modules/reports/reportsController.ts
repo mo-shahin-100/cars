@@ -51,19 +51,52 @@ export function getDashboardStats(req: Request, res: Response) {
     WHERE workshop_id = ?
   `).get(workshopId) as { total_expenses: number };
 
-  // 5. Recent active visits
+  // 5. Active visits with detailed work orders, replaced parts, tasks, and invoice info
   const recentVisits = db.prepare(`
     SELECT 
       v.id, v.visit_number, v.status, v.entry_datetime, v.customer_complaint,
-      veh.plate_number, veh.make, veh.model,
-      c.full_name as customer_name
+      v.vehicle_id, v.customer_id,
+      veh.plate_number, veh.make, veh.model, veh.year,
+      c.full_name as customer_name, c.phone as customer_phone,
+      wo.id as work_order_id, wo.order_number, wo.category as work_order_category, wo.description as work_order_desc,
+      wo.estimated_cost, wo.actual_cost,
+      inv.id as invoice_id, inv.invoice_number, inv.grand_total as invoice_total, inv.paid_amount, inv.balance_due, inv.status as invoice_status
     FROM visits v
     JOIN vehicles veh ON v.vehicle_id = veh.id
     JOIN customers c ON v.customer_id = c.id
+    LEFT JOIN work_orders wo ON wo.visit_id = v.id
+    LEFT JOIN invoices inv ON inv.visit_id = v.id
     WHERE v.workshop_id = ? AND v.status != 'delivered'
     ORDER BY v.entry_datetime DESC
-    LIMIT 6
-  `).all(workshopId);
+    LIMIT 50
+  `).all(workshopId) as any[];
+
+  // Attach tasks (what was repaired/checked) and used parts (what was replaced) for each visit
+  for (const v of recentVisits) {
+    if (v.work_order_id) {
+      v.tasks = db.prepare(`
+        SELECT t.id, t.title, t.description, t.price, t.status, u.full_name as mechanic_name
+        FROM tasks t
+        LEFT JOIN users u ON t.lead_mechanic_id = u.id
+        WHERE t.work_order_id = ?
+      `).all(v.work_order_id);
+
+      v.usedParts = db.prepare(`
+        SELECT up.id, up.quantity, up.unit_price, up.total_price, p.name as part_name, p.part_number, p.brand
+        FROM used_parts up
+        JOIN parts p ON up.part_id = p.id
+        WHERE up.work_order_id = ?
+      `).all(v.work_order_id);
+    } else {
+      v.tasks = [];
+      v.usedParts = [];
+    }
+
+    // Compute effective total price
+    const tasksCost = (v.tasks || []).reduce((acc: number, t: any) => acc + (Number(t.price) || 0), 0);
+    const partsCost = (v.usedParts || []).reduce((acc: number, p: any) => acc + (Number(p.total_price) || 0), 0);
+    v.total_cost = Number(v.invoice_total) || Number(v.actual_cost) || Number(v.estimated_cost) || (tasksCost + partsCost) || 0;
+  }
 
   return res.json({
     success: true,
