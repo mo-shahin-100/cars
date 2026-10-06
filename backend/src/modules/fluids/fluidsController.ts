@@ -117,6 +117,32 @@ export function createFluidRecord(req: Request, res: Response) {
         updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(nextDateStr, nextKm, odo, vehicle_id);
+
+    // 3. Connect to Inventory: Deduct stock if linked part_id provided
+    const partId = req.body.part_id;
+    if (partId) {
+      const part = db.prepare('SELECT id, stock_quantity, cost_price, sale_price, name FROM parts WHERE id = ? AND workshop_id = ?').get(partId, workshopId) as any;
+      if (part && part.stock_quantity >= qty) {
+        db.prepare('UPDATE parts SET stock_quantity = stock_quantity - ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(qty, partId);
+        db.prepare(`
+          INSERT INTO stock_movements (
+            id, workshop_id, part_id, movement_type, quantity, unit_cost, unit_price,
+            reference_type, reference_id, idempotency_key, notes, created_by
+          ) VALUES (?, ?, ?, 'dispense', ?, ?, ?, 'fluid_change', ?, ?, ?, ?)
+        `).run(
+          uuidv4(),
+          workshopId,
+          partId,
+          -qty,
+          part.cost_price,
+          part.sale_price,
+          recordId,
+          `fluid_sm_${Date.now()}_${uuidv4().substring(0, 6)}`,
+          `صرف زيت/سوائل للسيارة ${vehicle_id}`,
+          req.user!.id
+        );
+      }
+    }
   });
 
   logActivity(req, 'CREATE', 'fluid_change', recordId, {
@@ -132,6 +158,14 @@ export function createFluidRecord(req: Request, res: Response) {
     entityId: recordId,
     action: 'INSERT',
     payload: { id: recordId, vehicle_id, fluid_type, nextKm },
+    originUserId: req.user?.id
+  });
+  broadcastEvent({
+    workshopId,
+    entity: 'vehicles',
+    entityId: vehicle_id,
+    action: 'UPDATE',
+    payload: { id: vehicle_id, next_maintenance_date: nextDateStr, next_maintenance_km: nextKm },
     originUserId: req.user?.id
   });
 

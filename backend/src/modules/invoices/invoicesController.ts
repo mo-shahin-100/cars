@@ -107,6 +107,7 @@ export function createInvoice(req: Request, res: Response) {
   const countRow = db.prepare('SELECT COUNT(*) as c FROM invoices WHERE workshop_id = ?').get(workshopId) as { c: number };
   const invoice_number = `INV-${(countRow.c + 1).toString().padStart(5, '0')}`;
 
+  const explicitGrandTotal = req.body.grand_total !== undefined ? parseFloat(req.body.grand_total) : null;
   const labor = parseFloat(labor_total || 0);
   const parts = parseFloat(parts_total || 0);
   const fluids = parseFloat(fluids_total || 0);
@@ -114,10 +115,13 @@ export function createInvoice(req: Request, res: Response) {
   const subtotalBeforeTax = Math.max(0, (labor + parts + fluids) - discount);
   const taxRate = tax_percent !== undefined ? parseFloat(tax_percent) : 15.0;
   const taxAmount = (subtotalBeforeTax * taxRate) / 100.0;
-  const grandTotal = Math.round((subtotalBeforeTax + taxAmount) * 100) / 100;
+  const computedGrandTotal = Math.round((subtotalBeforeTax + taxAmount) * 100) / 100;
+  const grandTotal = explicitGrandTotal !== null && explicitGrandTotal > 0 ? explicitGrandTotal : computedGrandTotal;
 
-  const initPayAmt = initial_payment && initial_payment.amount ? parseFloat(initial_payment.amount) : 0;
-  const paidAmount = Math.min(grandTotal, initPayAmt);
+  const initPayAmt = initial_payment && initial_payment.amount
+    ? parseFloat(initial_payment.amount)
+    : (req.body.paid_amount !== undefined ? parseFloat(req.body.paid_amount) : 0);
+  const paidAmount = Math.min(grandTotal, Math.max(0, initPayAmt));
   const balanceDue = Math.max(0, grandTotal - paidAmount);
 
   let initialStatus = 'unpaid';
@@ -157,7 +161,7 @@ export function createInvoice(req: Request, res: Response) {
       req.user!.id
     );
 
-    // 2. Insert items
+    // 2. Insert items (or pull from work order tasks and parts if not provided)
     if (Array.isArray(items) && items.length > 0) {
       const insertItemStmt = db.prepare(`
         INSERT INTO invoice_items (id, invoice_id, item_type, description, quantity, unit_price, total_price, part_id)
@@ -178,12 +182,40 @@ export function createInvoice(req: Request, res: Response) {
           it.part_id || null
         );
       }
+    } else if (work_order_id) {
+      // Auto-import tasks from work order
+      const tasks = db.prepare('SELECT title, price FROM tasks WHERE work_order_id = ?').all(work_order_id) as any[];
+      const usedParts = db.prepare(`
+        SELECT up.quantity, up.unit_price, up.part_id, p.name as part_name
+        FROM used_parts up
+        JOIN parts p ON up.part_id = p.id
+        WHERE up.work_order_id = ?
+      `).all(work_order_id) as any[];
+
+      const insertItemStmt = db.prepare(`
+        INSERT INTO invoice_items (id, invoice_id, item_type, description, quantity, unit_price, total_price, part_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      for (const t of tasks) {
+        const p = parseFloat(t.price || 0);
+        insertItemStmt.run(uuidv4(), invoiceId, 'labor', t.title || 'عمل صيانة', 1, p, p, null);
+      }
+      for (const up of usedParts) {
+        const q = parseFloat(up.quantity || 1);
+        const p = parseFloat(up.unit_price || 0);
+        insertItemStmt.run(uuidv4(), invoiceId, 'part', up.part_name || 'قطع غيار', q, p, q * p, up.part_id);
+      }
     }
 
-    // 3. Process Initial Payment if provided
-    if (paidAmount > 0 && initial_payment) {
+    // 3. Process Initial Payment if paidAmount > 0
+    if (paidAmount > 0) {
       const payCount = db.prepare('SELECT COUNT(*) as c FROM payments WHERE workshop_id = ?').get(workshopId) as { c: number };
       const receiptNumber = `RCP-${(payCount.c + 1).toString().padStart(5, '0')}`;
+      const payMethod = initial_payment?.payment_method || req.body.payment_method || 'cash';
+      const refNumber = initial_payment?.reference_number || req.body.reference_number || null;
+      const payNotes = initial_payment?.notes || req.body.notes || 'سداد دفعة عند إصدار الفاتورة';
+
       db.prepare(`
         INSERT INTO payments (
           id, workshop_id, receipt_number, invoice_id, customer_id, amount,
@@ -196,9 +228,9 @@ export function createInvoice(req: Request, res: Response) {
         invoiceId,
         customer_id,
         paidAmount,
-        initial_payment.payment_method || 'cash',
-        initial_payment.reference_number || null,
-        initial_payment.notes || 'سداد دفعة أولى عند إصدار الفاتورة',
+        payMethod,
+        refNumber,
+        payNotes,
         req.user!.id
       );
     }
@@ -218,6 +250,14 @@ export function createInvoice(req: Request, res: Response) {
       SET total_spent = total_spent + ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
     `).run(grandTotal, vehicle_id);
+
+    // 6. Connect to Visit: Automatically advance visit status to 'ready' if still in progress
+    db.prepare(`
+      UPDATE visits 
+      SET status = CASE WHEN status NOT IN ('ready', 'delivered') THEN 'ready' ELSE status END,
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(visit_id);
   });
 
   logActivity(req, 'CREATE', 'invoice', invoiceId, { invoice_number, grandTotal, paidAmount, balanceDue });
@@ -227,6 +267,22 @@ export function createInvoice(req: Request, res: Response) {
     entityId: invoiceId,
     action: 'INSERT',
     payload: { id: invoiceId, invoice_number, grand_total: grandTotal, status: initialStatus },
+    originUserId: req.user?.id
+  });
+  broadcastEvent({
+    workshopId,
+    entity: 'visits',
+    entityId: visit_id,
+    action: 'UPDATE',
+    payload: { id: visit_id, status: 'ready' },
+    originUserId: req.user?.id
+  });
+  broadcastEvent({
+    workshopId,
+    entity: 'customers',
+    entityId: customer_id,
+    action: 'UPDATE',
+    payload: { id: customer_id, balance_due: balanceDue },
     originUserId: req.user?.id
   });
 
@@ -322,6 +378,22 @@ export function registerPayment(req: Request, res: Response) {
     entityId: paymentId,
     action: 'INSERT',
     payload: { invoice_id, receipt_number: receiptNumber, amount: actualPayment, newStatus },
+    originUserId: req.user?.id
+  });
+  broadcastEvent({
+    workshopId,
+    entity: 'invoices',
+    entityId: invoice_id,
+    action: 'UPDATE',
+    payload: { id: invoice_id, paid_amount: newPaidAmount, balance_due: newBalanceDue, status: newStatus },
+    originUserId: req.user?.id
+  });
+  broadcastEvent({
+    workshopId,
+    entity: 'customers',
+    entityId: invoice.customer_id,
+    action: 'UPDATE',
+    payload: { id: invoice.customer_id },
     originUserId: req.user?.id
   });
 

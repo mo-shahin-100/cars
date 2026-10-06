@@ -506,6 +506,10 @@ export function updateVisitStatus(req: Request, res: Response) {
       UPDATE visits SET status = ?, notes = COALESCE(?, notes), odometer_out = COALESCE(?, odometer_out), exit_datetime = CURRENT_TIMESTAMP, delivered_by = ?, updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND workshop_id = ?
     `).run(status, notes || null, odoOut, req.user!.id, id, workshopId);
+
+    if (odoOut) {
+      db.prepare('UPDATE vehicles SET current_odometer = MAX(current_odometer, ?), updated_at = CURRENT_TIMESTAMP WHERE id = ?').run(odoOut, visit.vehicle_id);
+    }
   } else {
     db.prepare(`
       UPDATE visits SET status = ?, notes = COALESCE(?, notes), odometer_out = COALESCE(?, odometer_out), updated_at = CURRENT_TIMESTAMP
