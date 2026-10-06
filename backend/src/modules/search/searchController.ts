@@ -99,7 +99,33 @@ export function globalSearch(req: Request, res: Response) {
       LIMIT 8
     `).all(workshopId, wildcard, wildcard, wildcard, wildcard);
 
-    const totalResults = customers.length + vehicles.length + visits.length + workOrders.length + diagnosticCodes.length;
+    // 6. Search Invoices (رقم الفاتورة، اسم العميل، رقم السيارة واللوحة)
+    const invoices = db.prepare(`
+      SELECT inv.id, inv.invoice_number, inv.grand_total, inv.paid_amount, inv.balance_due, inv.status, inv.issue_date, inv.visit_id,
+             c.id as customer_id, c.full_name as customer_name, c.phone as customer_phone,
+             v.id as vehicle_id, v.plate_number, v.make, v.model
+      FROM invoices inv
+      JOIN customers c ON inv.customer_id = c.id
+      JOIN vehicles v ON inv.vehicle_id = v.id
+      WHERE inv.workshop_id = ? AND inv.status != 'cancelled' AND (
+        inv.invoice_number LIKE ? OR c.full_name LIKE ? OR c.phone LIKE ? OR v.plate_number LIKE ?
+      )
+      ORDER BY inv.issue_date DESC
+      LIMIT 8
+    `).all(workshopId, wildcard, wildcard, wildcard, wildcard);
+
+    // 7. Search Parts / Inventory (اسم الصنف، كود القطعة، الماركة، التصنيف)
+    const parts = db.prepare(`
+      SELECT id, part_number, name, brand, category, unit, cost_price, sale_price, stock_quantity, min_stock_alert, location
+      FROM parts
+      WHERE workshop_id = ? AND deleted_at IS NULL AND (
+        name LIKE ? OR part_number LIKE ? OR brand LIKE ? OR category LIKE ?
+      )
+      ORDER BY name ASC
+      LIMIT 8
+    `).all(workshopId, wildcard, wildcard, wildcard, wildcard);
+
+    const totalResults = customers.length + vehicles.length + visits.length + workOrders.length + diagnosticCodes.length + invoices.length + parts.length;
 
     return res.json({
       success: true,
@@ -109,6 +135,8 @@ export function globalSearch(req: Request, res: Response) {
         visits,
         workOrders,
         diagnosticCodes,
+        invoices,
+        parts,
         totalResults
       }
     });

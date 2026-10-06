@@ -302,7 +302,58 @@ export interface Expense {
   created_by_name?: string;
 }
 
+export interface DashboardAlert {
+  id: string;
+  type: string;
+  title: string;
+  count: number;
+  description: string;
+  severity: 'danger' | 'warning' | 'success' | 'info';
+  actionLabel: string;
+  targetTab: string;
+  filter?: string;
+}
+
+export interface DashboardActivity {
+  id: string;
+  action: string;
+  entity_name: string;
+  entity_id: string;
+  description: string;
+  user_name: string;
+  created_at: string;
+}
+
 export interface DashboardStats {
+  summary?: {
+    today_vehicles: number;
+    total_in_workshop: number;
+    today_collections: number;
+    today_invoiced: number;
+    attention_count: number;
+  };
+  pipeline?: {
+    received: number;
+    inspection: number;
+    diagnostics: number;
+    repair: number;
+    waiting_parts: number;
+    testing: number;
+    ready: number;
+  };
+  alerts?: DashboardAlert[];
+  financialSnapshot?: {
+    today_invoiced: number;
+    today_collected: number;
+    today_expenses: number;
+    today_net: number;
+    total_outstanding: number;
+    total_invoiced_all: number;
+    total_collected_all: number;
+    total_expenses_all: number;
+  };
+  recentActivity?: DashboardActivity[];
+  currentVehicles?: any[];
   vehicles: {
     total_in_workshop: number;
     diagnosing_count: number;
@@ -311,6 +362,7 @@ export interface DashboardStats {
     ready_count: number;
     received_count: number;
     maintenance_count?: number;
+    today_vehicles_count?: number;
   };
   tasks: {
     tasks_in_progress: number;

@@ -326,7 +326,7 @@ export const api = {
     method: 'DELETE'
   }),
 
-  // Global Unified Search (بحث موحد في العملاء والسيارات والأعطال وأوامر الشغل والفحص)
+  // Global Unified Search (بحث موحد في العملاء والسيارات والأعطال وأوامر الشغل والفحص والفواتير وقطع الغيار)
   globalSearch: (query: string) =>
     request<{
       success: boolean;
@@ -336,6 +336,8 @@ export const api = {
         visits: any[];
         workOrders: any[];
         diagnosticCodes: any[];
+        invoices: any[];
+        parts: any[];
         totalResults: number;
       };
     }>(`/search?q=${encodeURIComponent(query)}`)

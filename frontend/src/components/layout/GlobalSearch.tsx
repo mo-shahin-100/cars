@@ -12,7 +12,9 @@ import {
   Clock,
   Phone,
   Tag,
-  Hash
+  Hash,
+  Receipt,
+  Boxes
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { useTheme } from '../../context/ThemeContext';
@@ -28,13 +30,15 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ onNavigate }) => {
   const [query, setQuery] = useState('');
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [filterType, setFilterType] = useState<'all' | 'customers' | 'vehicles' | 'visits' | 'workOrders' | 'diagnosticCodes'>('all');
+  const [filterType, setFilterType] = useState<'all' | 'customers' | 'vehicles' | 'visits' | 'workOrders' | 'diagnosticCodes' | 'invoices' | 'parts'>('all');
   const [results, setResults] = useState<{
     customers: any[];
     vehicles: any[];
     visits: any[];
     workOrders: any[];
     diagnosticCodes: any[];
+    invoices: any[];
+    parts: any[];
     totalResults: number;
   }>({
     customers: [],
@@ -42,6 +46,8 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ onNavigate }) => {
     visits: [],
     workOrders: [],
     diagnosticCodes: [],
+    invoices: [],
+    parts: [],
     totalResults: 0
   });
 
@@ -86,6 +92,8 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ onNavigate }) => {
         visits: [],
         workOrders: [],
         diagnosticCodes: [],
+        invoices: [],
+        parts: [],
         totalResults: 0
       });
       setLoading(false);
@@ -175,6 +183,8 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ onNavigate }) => {
                 visits: [],
                 workOrders: [],
                 diagnosticCodes: [],
+                invoices: [],
+                parts: [],
                 totalResults: 0
               });
               inputRef.current?.focus();
@@ -286,6 +296,36 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ onNavigate }) => {
               >
                 <Cpu className="w-3.5 h-3.5" />
                 أكواد الفحص DTC ({results.diagnosticCodes.length})
+              </button>
+            )}
+
+            {results.invoices && results.invoices.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setFilterType('invoices')}
+                className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1 whitespace-nowrap ${
+                  filterType === 'invoices'
+                    ? 'bg-sky-500 text-white shadow-sm shadow-sky-500/30'
+                    : isDark ? 'text-slate-400 hover:bg-white/[0.06]' : 'text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                <Receipt className="w-3.5 h-3.5" />
+                الفواتير ({results.invoices.length})
+              </button>
+            )}
+
+            {results.parts && results.parts.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setFilterType('parts')}
+                className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all flex items-center gap-1 whitespace-nowrap ${
+                  filterType === 'parts'
+                    ? 'bg-sky-500 text-white shadow-sm shadow-sky-500/30'
+                    : isDark ? 'text-slate-400 hover:bg-white/[0.06]' : 'text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                <Boxes className="w-3.5 h-3.5" />
+                قطع الغيار ({results.parts.length})
               </button>
             )}
           </div>
@@ -534,6 +574,94 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ onNavigate }) => {
                           <div className="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5">
                             {dtc.system && <span>المنظومة: {dtc.system}</span>}
                             <span className="font-mono text-slate-300">السيارة: {dtc.plate_number}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <ChevronLeft className="w-4 h-4 text-slate-400 group-hover:-translate-x-1 transition-transform shrink-0" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 6. INVOICES SECTION */}
+            {(filterType === 'all' || filterType === 'invoices') && results.invoices && results.invoices.length > 0 && (
+              <div>
+                <div className="flex items-center gap-1.5 px-2 py-1 text-xs font-black text-teal-400">
+                  <Receipt className="w-3.5 h-3.5" />
+                  <span>الفواتير المالية ({results.invoices.length})</span>
+                </div>
+                <div className="space-y-1 mt-1">
+                  {results.invoices.map((inv) => (
+                    <div
+                      key={inv.id}
+                      onClick={() => handleSelect('invoices', inv.id, inv.invoice_number)}
+                      className={`p-2.5 rounded-xl cursor-pointer transition-all flex items-center justify-between group ${
+                        isDark ? 'hover:bg-white/[0.06] bg-white/[0.02]' : 'hover:bg-teal-50 bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                        <div className="w-9 h-9 rounded-xl bg-teal-500/10 text-teal-400 flex items-center justify-center font-bold text-xs shrink-0">
+                          <Receipt className="w-4 h-4" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs md:text-sm font-bold flex items-center gap-2">
+                            <span className="font-mono text-teal-300 font-bold">#{inv.invoice_number}</span>
+                            <span className="text-slate-200 truncate">{inv.customer_name}</span>
+                            <span className="font-mono text-emerald-400 font-black text-xs mr-auto">
+                              {Number(inv.grand_total || 0).toLocaleString()} ج.م
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5">
+                            <span className="font-mono text-slate-300">{inv.plate_number}</span>
+                            {inv.balance_due > 0 && (
+                              <span className="text-amber-400 font-bold">
+                                المتبقي: {Number(inv.balance_due).toLocaleString()} ج.م
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <ChevronLeft className="w-4 h-4 text-slate-400 group-hover:-translate-x-1 transition-transform shrink-0" />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* 7. PARTS / INVENTORY SECTION */}
+            {(filterType === 'all' || filterType === 'parts') && results.parts && results.parts.length > 0 && (
+              <div>
+                <div className="flex items-center gap-1.5 px-2 py-1 text-xs font-black text-sky-400">
+                  <Boxes className="w-3.5 h-3.5" />
+                  <span>قطع الغيار والمخزون ({results.parts.length})</span>
+                </div>
+                <div className="space-y-1 mt-1">
+                  {results.parts.map((p) => (
+                    <div
+                      key={p.id}
+                      onClick={() => handleSelect('inventory_stock', p.id, p.name)}
+                      className={`p-2.5 rounded-xl cursor-pointer transition-all flex items-center justify-between group ${
+                        isDark ? 'hover:bg-white/[0.06] bg-white/[0.02]' : 'hover:bg-sky-50 bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 flex-1 min-w-0">
+                        <div className="w-9 h-9 rounded-xl bg-sky-500/10 text-sky-400 flex items-center justify-center shrink-0">
+                          <Boxes className="w-4 h-4" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="text-xs md:text-sm font-bold flex items-center gap-2">
+                            <span className="text-slate-100 font-bold">{p.name}</span>
+                            {p.part_number && (
+                              <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-sky-400 border border-slate-700">
+                                {p.part_number}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-400 flex items-center gap-3 mt-0.5">
+                            {p.brand && <span>الماركة: {p.brand}</span>}
+                            <span>الرصيد: <strong className={p.stock_quantity <= p.min_stock_alert ? 'text-rose-400' : 'text-emerald-400'}>{p.stock_quantity}</strong> {p.unit || 'قطعة'}</span>
+                            <span className="font-mono text-slate-300 font-bold">السعر: {Number(p.sale_price || 0).toLocaleString()} ج.م</span>
                           </div>
                         </div>
                       </div>

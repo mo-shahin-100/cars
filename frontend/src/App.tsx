@@ -179,7 +179,7 @@ const MainApp: React.FC = () => {
   const renderActiveView = () => {
     switch (activeTab) {
       case 'dashboard':
-        return <DashboardView onNavigate={setActiveTab} onQuickAction={() => setActiveTab('visits')} />;
+        return <DashboardView onNavigate={handleGlobalNavigate} onQuickAction={() => setActiveTab('visits')} />;
       case 'customers':
         return <CustomersView initialSearch={targetSearch?.search} initialCustomerId={targetSearch?.id} />;
       case 'vehicles':
@@ -270,7 +270,7 @@ const MainApp: React.FC = () => {
       case 'mechanic_station':
         return <MechanicWorkstation />;
       default:
-        return <DashboardView onNavigate={setActiveTab} onQuickAction={() => setActiveTab('visits')} />;
+        return <DashboardView onNavigate={handleGlobalNavigate} onQuickAction={() => setActiveTab('visits')} />;
     }
   };
 
