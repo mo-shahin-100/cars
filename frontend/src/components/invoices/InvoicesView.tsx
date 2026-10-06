@@ -90,6 +90,22 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({ initialInvoiceId, in
     }
   };
 
+  const handleOpenPaymentDirect = async (inv: Invoice) => {
+    try {
+      const res = await api.getInvoiceById(inv.id);
+      setSelectedInvoice(res.data);
+      setPaymentData({
+        amount: inv.balance_due,
+        payment_method: 'cash',
+        reference_number: '',
+        notes: 'سداد باقي الفاتورة'
+      });
+      setShowPaymentModal(true);
+    } catch (err: any) {
+      alert(err.message);
+    }
+  };
+
   const handleDeleteInvoice = async (id: string, number: string) => {
     if (!window.confirm(`هل أنت متأكد من حذف الفاتورة رقم "${number}" وسندات القبض المرتبطة بها؟`)) {
       return;
@@ -335,6 +351,16 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({ initialInvoiceId, in
                     </td>
                     <td className="py-3 px-4 text-center">
                       <div className="flex items-center justify-center gap-1.5">
+                        {inv.balance_due > 0 && (
+                          <button
+                            onClick={() => handleOpenPaymentDirect(inv)}
+                            className="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-lg text-xs transition-all flex items-center gap-1 shadow-sm active:scale-95 cursor-pointer"
+                            title="سداد باقي المبلغ وإصدار سند قبض"
+                          >
+                            <DollarSign className="w-3.5 h-3.5" />
+                            <span>سداد</span>
+                          </button>
+                        )}
                         <button
                           onClick={() => handleOpenDetail(inv.id)}
                           className="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-sky-400 rounded-lg text-xs font-semibold"
