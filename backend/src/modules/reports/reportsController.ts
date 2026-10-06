@@ -7,12 +7,13 @@ export function getDashboardStats(req: Request, res: Response) {
   // 1. Vehicle statuses in workshop
   const vehicleStats = db.prepare(`
     SELECT 
-      COUNT(CASE WHEN status != 'delivered' AND status != 'cancelled' THEN 1 END) as total_in_workshop,
-      COUNT(CASE WHEN status = 'diagnosing' THEN 1 END) as diagnosing_count,
-      COUNT(CASE WHEN status = 'in_repair' THEN 1 END) as in_repair_count,
+      COUNT(CASE WHEN status NOT IN ('delivered', 'cancelled') THEN 1 END) as total_in_workshop,
+      COUNT(CASE WHEN status IN ('diagnosing', 'diagnostics') THEN 1 END) as diagnosing_count,
+      COUNT(CASE WHEN status IN ('in_repair', 'maintenance', 'repairs', 'engine_overhaul') THEN 1 END) as in_repair_count,
       COUNT(CASE WHEN status = 'waiting_parts' THEN 1 END) as waiting_parts_count,
       COUNT(CASE WHEN status = 'ready' THEN 1 END) as ready_count,
-      COUNT(CASE WHEN status = 'received' THEN 1 END) as received_count
+      COUNT(CASE WHEN status = 'received' THEN 1 END) as received_count,
+      COUNT(CASE WHEN status NOT IN ('ready', 'delivered', 'cancelled') THEN 1 END) as maintenance_count
     FROM visits
     WHERE workshop_id = ?
   `).get(workshopId) as any;

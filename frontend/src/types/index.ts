@@ -310,6 +310,7 @@ export interface DashboardStats {
     waiting_parts_count: number;
     ready_count: number;
     received_count: number;
+    maintenance_count?: number;
   };
   tasks: {
     tasks_in_progress: number;

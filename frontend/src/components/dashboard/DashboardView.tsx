@@ -65,7 +65,8 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onQuic
     in_repair_count: 0,
     waiting_parts_count: 0,
     ready_count: 0,
-    received_count: 0
+    received_count: 0,
+    maintenance_count: 0
   };
 
   const fStats = stats?.financials || {
@@ -116,6 +117,47 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onQuic
     }
   };
 
+  // All visits from stats
+  const allVisits = stats?.recentVisits || [];
+
+  // Accurate maintenance count dynamically calculated from all active workshop visits (not ready, delivered, or cancelled)
+  const inMaintenanceCount = allVisits.length > 0
+    ? allVisits.filter((v: any) => v.status !== 'ready' && v.status !== 'delivered' && v.status !== 'cancelled').length
+    : (vStats.maintenance_count || Math.max(0, (vStats.total_in_workshop || 0) - (vStats.ready_count || 0)));
+
+  // Full Arabic status badge translator
+  const getArabicStatusBadge = (status: string) => {
+    const s = String(status || '').toLowerCase().trim();
+    if (s === 'engine_overhaul' || s === 'overhaul' || s.includes('عمرة') || s.includes('توضيب')) {
+      return { label: 'عمرة وتوضيب محرك', color: 'bg-rose-500/15 text-rose-400 border border-rose-500/40' };
+    }
+    if (s === 'maintenance' || s.includes('دورية') || s.includes('maint')) {
+      return { label: 'صيانة دورية وسريعة', color: 'bg-amber-500/15 text-amber-400 border border-amber-400/40' };
+    }
+    if (s === 'repairs' || s === 'in_repair' || s === 'repair' || s.includes('إصلاح') || s.includes('تصليح')) {
+      return { label: 'إصلاحات عامة وميكانيكا', color: 'bg-amber-500/15 text-amber-400 border border-amber-400/40' };
+    }
+    if (s === 'diagnostics' || s === 'diagnosing' || s.includes('فحص') || s.includes('كمبيوتر')) {
+      return { label: 'فحص كمبيوتر وأعطال', color: 'bg-purple-500/15 text-purple-400 border border-purple-400/40' };
+    }
+    if (s === 'waiting_parts' || s.includes('قطع')) {
+      return { label: 'انتظار قطع غيار', color: 'bg-orange-500/15 text-orange-400 border border-orange-400/40' };
+    }
+    if (s === 'received' || s.includes('استلام')) {
+      return { label: 'استلام وفحص أولي', color: 'bg-slate-500/15 text-slate-300 border border-slate-500/40' };
+    }
+    if (s === 'ready' || s.includes('جاهز')) {
+      return { label: 'جاهزة للتسليم ✓', color: 'bg-emerald-500/15 text-emerald-400 border border-emerald-400/40' };
+    }
+    if (s === 'delivered' || s.includes('تسليم')) {
+      return { label: 'تم التسليم للعميل', color: 'bg-teal-500/15 text-teal-300 border border-teal-500/40' };
+    }
+    if (s === 'cancelled' || s.includes('ملغ')) {
+      return { label: 'ملغية', color: 'bg-red-500/15 text-red-400 border border-red-500/40' };
+    }
+    return { label: status || 'تحت العمل بالورشة', color: 'bg-slate-800 text-slate-300 border border-slate-700' };
+  };
+
   return (
     <div className="space-y-6">
 
@@ -162,7 +204,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onQuic
             {
               id: 'maintenance' as const,
               label: 'صيانة (عمرة / فحص / ميكانيكا)',
-              value: Math.max(0, (vStats.in_repair_count || 0) + (vStats.diagnosing_count || 0) + (vStats.waiting_parts_count || 0) + (vStats.received_count || 0)),
+              value: inMaintenanceCount,
               valCls: 'text-amber-400',
               sub: selectedStatusFilter === 'maintenance' ? 'معروضة بالجدول أدناه ✓' : 'اضغط لعرض سيارات الصيانة والعمرة 👈',
               subCls: 'text-amber-400',
@@ -244,10 +286,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onQuic
           }
           if (selectedStatusFilter === 'maintenance') {
             return (
-              v.status === 'in_repair' ||
-              v.status === 'diagnosing' ||
-              v.status === 'waiting_parts' ||
-              v.status === 'received'
+              v.status !== 'ready' &&
+              v.status !== 'delivered' &&
+              v.status !== 'cancelled'
             );
           }
           return v.status !== 'delivered' && v.status !== 'cancelled';
@@ -309,15 +350,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onQuic
                 <tbody className={tbodyDiv}>
                   {filteredVisits.length > 0 ? (
                     filteredVisits.map((v: any) => {
-                      const statusBadges: Record<string, { label: string; color: string }> = {
-                        received:      { label: 'استلام وفحص أولي', color: isDark ? 'bg-white/10 text-white border border-white/20' : 'bg-slate-100 text-slate-700 border border-slate-300' },
-                        diagnosing:    { label: 'فحص كمبيوتر وأعطال', color: 'bg-purple-500/15 text-purple-400 border border-purple-400/30' },
-                        in_repair:     { label: 'صيانة وميكانيكا وعمرة', color: 'bg-amber-500/15 text-amber-400 border border-amber-400/30' },
-                        waiting_parts: { label: 'انتظار قطع غيار',  color: 'bg-rose-500/15 text-rose-400 border border-rose-400/30' },
-                        ready:         { label: 'جاهزة للتسليم ✓', color: 'bg-emerald-500/15 text-emerald-400 border border-emerald-400/30' },
-                        delivered:     { label: 'تم التسليم',        color: 'bg-sky-500/15 text-sky-400 border border-sky-400/30' },
-                      };
-                      const badge = statusBadges[v.status] || { label: v.status, color: isDark ? 'bg-white/10 text-white' : 'bg-slate-100 text-slate-700' };
+                      const badge = getArabicStatusBadge(v.status);
 
                       return (
                         <tr key={v.id} className={`${rowHover} transition-colors`}>
