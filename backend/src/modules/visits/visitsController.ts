@@ -16,12 +16,18 @@ export function getVisits(req: Request, res: Response) {
       veh.plate_number, veh.make, veh.model, veh.year,
       c.full_name as customer_name, c.phone as customer_phone,
       u.full_name as received_by_name,
-      COUNT(DISTINCT wo.id) as work_orders_count
+      COUNT(DISTINCT wo.id) as work_orders_count,
+      inv.id as invoice_id,
+      inv.invoice_number,
+      inv.status as invoice_status,
+      inv.grand_total as invoice_total,
+      inv.balance_due as invoice_balance_due
     FROM visits v
     JOIN vehicles veh ON v.vehicle_id = veh.id
     JOIN customers c ON v.customer_id = c.id
     LEFT JOIN users u ON v.received_by = u.id
     LEFT JOIN work_orders wo ON wo.visit_id = v.id
+    LEFT JOIN invoices inv ON inv.visit_id = v.id AND inv.status != 'cancelled'
     WHERE v.workshop_id = ?
   `;
   const params: any[] = [workshopId];

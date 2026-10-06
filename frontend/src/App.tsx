@@ -256,7 +256,7 @@ const MainApp: React.FC = () => {
       case 'fluids':
         return <FluidsView />;
       case 'invoices':
-        return <InvoicesView />;
+        return <InvoicesView initialInvoiceId={targetSearch?.id} initialSearch={targetSearch?.search} />;
       case 'expenses':
         return <ExpensesView />;
       case 'reports':

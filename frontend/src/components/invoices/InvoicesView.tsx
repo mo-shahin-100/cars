@@ -5,11 +5,17 @@ import { Invoice, Visit } from '../../types';
 import { useSync } from '../../context/SyncContext';
 import { VehicleHandoverReportModal } from '../visits/VehicleHandoverReportModal';
 
-export const InvoicesView: React.FC = () => {
+interface InvoicesViewProps {
+  initialInvoiceId?: string;
+  initialSearch?: string;
+}
+
+export const InvoicesView: React.FC<InvoicesViewProps> = ({ initialInvoiceId, initialSearch }) => {
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [visits, setVisits] = useState<Visit[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState('');
+  const [searchQuery, setSearchQuery] = useState(initialSearch || '');
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
   const [reportVisitId, setReportVisitId] = useState<string | null>(null);
 
@@ -62,6 +68,18 @@ export const InvoicesView: React.FC = () => {
       }
     }
   }, [lastEvent]);
+
+  useEffect(() => {
+    if (initialInvoiceId) {
+      handleOpenDetail(initialInvoiceId);
+    }
+  }, [initialInvoiceId]);
+
+  useEffect(() => {
+    if (initialSearch !== undefined) {
+      setSearchQuery(initialSearch);
+    }
+  }, [initialSearch]);
 
   const handleOpenDetail = async (id: string) => {
     try {
@@ -167,6 +185,22 @@ export const InvoicesView: React.FC = () => {
     window.print();
   };
 
+  const filteredInvoices = invoices.filter(inv => {
+    if (!searchQuery.trim()) return true;
+    const q = searchQuery.toLowerCase().trim();
+    return (
+      (inv.invoice_number || '').toLowerCase().includes(q) ||
+      (inv.customer_name || '').toLowerCase().includes(q) ||
+      (inv.plate_number || '').toLowerCase().includes(q) ||
+      `${inv.make || ''} ${inv.model || ''}`.toLowerCase().includes(q)
+    );
+  });
+
+  const unbilledVisits = visits.filter(vis => 
+    !vis.invoice_id && 
+    !invoices.some(inv => inv.visit_id === vis.id && inv.status !== 'cancelled')
+  );
+
   return (
     <div className="space-y-6">
       {/* Top Bar */}
@@ -214,23 +248,47 @@ export const InvoicesView: React.FC = () => {
           </button>
         </div>
 
-        <button
-          onClick={() => setShowAddModal(true)}
-          className="flex items-center justify-center gap-2 bg-white hover:bg-slate-100 text-slate-950 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-black shadow-lg shadow-white/15 active:scale-95 transition-all border border-white cursor-pointer"
-        >
-          <Plus className="w-4 h-4 stroke-[2.5]" />
-          <span>إصدار فاتورة جديدة</span>
-        </button>
+        <div className="flex items-center gap-2.5">
+          <div className="relative flex-1 sm:w-64">
+            <Search className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="بحث برقم الفاتورة، العميل، اللوحة..."
+              className="w-full bg-slate-900 border border-slate-700 rounded-xl pr-8 pl-8 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-sky-500"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+
+          <button
+            onClick={() => setShowAddModal(true)}
+            className="flex items-center justify-center gap-2 bg-white hover:bg-slate-100 text-slate-950 px-4 py-2 rounded-xl text-xs sm:text-sm font-black shadow-lg shadow-white/15 active:scale-95 transition-all border border-white cursor-pointer shrink-0"
+          >
+            <Plus className="w-4 h-4 stroke-[2.5]" />
+            <span>إصدار فاتورة جديدة</span>
+          </button>
+        </div>
       </div>
 
       {/* Invoices Table */}
       <div className="glass-card rounded-2xl overflow-hidden">
         {loading ? (
           <div className="p-8 text-center text-slate-400 text-sm">جاري جلب الفواتير...</div>
-        ) : invoices.length === 0 ? (
+        ) : filteredInvoices.length === 0 ? (
           <div className="p-12 text-center text-slate-400">
             <Receipt className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-            <p className="font-semibold text-slate-300">لا توجد فواتير مسجلة</p>
+            <p className="font-semibold text-slate-300">
+              {searchQuery ? `لا توجد فواتير مطابقة للبحث "${searchQuery}"` : 'لا توجد فواتير مسجلة'}
+            </p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -248,7 +306,7 @@ export const InvoicesView: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
-                {invoices.map((inv) => (
+                {filteredInvoices.map((inv) => (
                   <tr key={inv.id} className="hover:bg-slate-800/40 transition-colors">
                     <td className="py-3 px-4 font-mono font-bold text-sky-400">{inv.invoice_number}</td>
                     <td className="py-3 px-4 font-semibold text-slate-200">{inv.customer_name}</td>
@@ -321,15 +379,25 @@ export const InvoicesView: React.FC = () => {
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-sky-500"
                 >
                   <option value="">اختر الزيارة...</option>
-                  {visits.map((vis) => (
-                    <option key={vis.id} value={vis.id}>
-                      [{vis.visit_number}] {vis.make} {vis.model} ({vis.plate_number}) - العميل: {vis.customer_name}
-                    </option>
-                  ))}
+                  {unbilledVisits.length > 0 ? (
+                    unbilledVisits.map((vis) => (
+                      <option key={vis.id} value={vis.id}>
+                        [{vis.visit_number}] {vis.make} {vis.model} ({vis.plate_number}) - العميل: {vis.customer_name}
+                      </option>
+                    ))
+                  ) : (
+                    <option value="" disabled>-- جميع السيارات الحالية تم إصدار فواتير لها بالفعل --</option>
+                  )}
                 </select>
-                <p className="text-[11px] text-sky-400 mt-1">
-                  💡 يتم احتساب أجور الصيانة وقطع الغيار المصروفة تلقائياً بمجرد اختيار الزيارة
-                </p>
+                {unbilledVisits.length === 0 ? (
+                  <p className="text-[11px] text-amber-400 mt-1.5 flex items-center gap-1">
+                    <span>💡 جميع سيارات الورشة الحالية صادر لها فواتير بالفعل. يمكنك استعراض الفواتير وسداد دفعات عليها مباشرة.</span>
+                  </p>
+                ) : (
+                  <p className="text-[11px] text-sky-400 mt-1">
+                    💡 يتم احتساب أجور الصيانة وقطع الغيار المصروفة تلقائياً بمجرد اختيار الزيارة
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

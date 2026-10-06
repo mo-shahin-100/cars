@@ -1894,12 +1894,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onQuic
                   className={`w-full p-2.5 rounded-xl border focus:outline-none focus:ring-1 focus:ring-emerald-500 ${inputBg}`}
                 >
                   <option value="">-- اختر السيارة المراد فوترتها --</option>
-                  {activeVisitsList.map((v) => (
+                  {activeVisitsList
+                    .filter(v => !v.invoice_number && !v.invoice_id)
+                    .map((v) => (
                     <option key={v.id} value={v.id}>
                       {v.plate_number} - {v.customer_name} (المقدر: {Number(v.total_cost || 0).toLocaleString()} ج.م)
                     </option>
                   ))}
                 </select>
+                {activeVisitsList.filter(v => !v.invoice_number && !v.invoice_id).length === 0 && (
+                  <p className="text-[11px] text-amber-400 mt-1.5 flex items-center gap-1">
+                    <span>💡 جميع السيارات الحالية بالورشة صادر لها فواتير بالفعل. لتسجيل دفعة أو تحصيل مبالغ، اضغط "تسجيل دفعة" (Alt+P).</span>
+                  </p>
+                )}
               </div>
 
               <div className="grid grid-cols-2 gap-3">

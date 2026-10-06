@@ -103,6 +103,97 @@ export function createInvoice(req: Request, res: Response) {
     return res.status(400).json({ success: false, error: 'الزيارة، العميل، والسيارة حقول إلزامية' });
   }
 
+  // Check if an active invoice already exists for this visit
+  const existingInvoice = db.prepare(`
+    SELECT * FROM invoices 
+    WHERE visit_id = ? AND workshop_id = ? AND status != 'cancelled'
+    ORDER BY created_at DESC
+  `).get(visit_id, workshopId) as any;
+
+  const initPayAmt = initial_payment && initial_payment.amount
+    ? parseFloat(initial_payment.amount)
+    : (req.body.paid_amount !== undefined ? parseFloat(req.body.paid_amount) : 0);
+
+  if (existingInvoice) {
+    if (initPayAmt > 0) {
+      const payAmount = Math.min(existingInvoice.balance_due, initPayAmt);
+      const newPaid = Math.round((existingInvoice.paid_amount + payAmount) * 100) / 100;
+      const newBalance = Math.max(0, Math.round((existingInvoice.grand_total - newPaid) * 100) / 100);
+      const newStatus = newBalance <= 0 ? 'paid' : 'partially_paid';
+
+      executeTransaction(() => {
+        db.prepare(`
+          UPDATE invoices 
+          SET paid_amount = ?, balance_due = ?, status = ? 
+          WHERE id = ?
+        `).run(newPaid, newBalance, newStatus, existingInvoice.id);
+
+        const receiptCount = db.prepare('SELECT COUNT(*) as c FROM payments WHERE workshop_id = ?').get(workshopId) as { c: number };
+        const receipt_number = `RCP-${(receiptCount.c + 1).toString().padStart(5, '0')}`;
+
+        db.prepare(`
+          INSERT INTO payments (id, workshop_id, receipt_number, invoice_id, customer_id, amount, payment_method, reference_number, notes, received_by)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          uuidv4(),
+          workshopId,
+          receipt_number,
+          existingInvoice.id,
+          customer_id,
+          payAmount,
+          initial_payment?.payment_method || req.body.payment_method || 'cash',
+          initial_payment?.reference_number || null,
+          'سداد دفعة على الفاتورة القائمة',
+          req.user!.id
+        );
+
+        // Recalculate customer balance
+        const balanceRow = db.prepare(`
+          SELECT COALESCE(SUM(balance_due), 0) as total 
+          FROM invoices 
+          WHERE customer_id = ? AND status != 'cancelled'
+        `).get(customer_id) as any;
+        db.prepare('UPDATE customers SET total_balance_due = ? WHERE id = ?').run(balanceRow?.total || 0, customer_id);
+      });
+
+      broadcastEvent({
+        workshopId,
+        entity: 'invoices',
+        entityId: existingInvoice.id,
+        action: 'UPDATE',
+        payload: { id: existingInvoice.id },
+        originUserId: req.user?.id
+      });
+      broadcastEvent({
+        workshopId,
+        entity: 'payments',
+        entityId: existingInvoice.id,
+        action: 'INSERT',
+        originUserId: req.user?.id
+      });
+      broadcastEvent({
+        workshopId,
+        entity: 'customers',
+        entityId: customer_id,
+        action: 'UPDATE',
+        payload: { id: customer_id },
+        originUserId: req.user?.id
+      });
+
+      return res.json({
+        success: true,
+        message: `تم سداد دفعة للفاتورة القائمة (${existingInvoice.invoice_number}) بنجاح بدلاً من تكرارها`,
+        data: { id: existingInvoice.id, invoice_number: existingInvoice.invoice_number, alreadyExisted: true }
+      });
+    }
+
+    return res.json({
+      success: true,
+      message: `هذه الزيارة صادر لها بالفعل فاتورة برقم (${existingInvoice.invoice_number})`,
+      data: { id: existingInvoice.id, invoice_number: existingInvoice.invoice_number, alreadyExisted: true }
+    });
+  }
+
   const invoiceId = uuidv4();
   const countRow = db.prepare('SELECT COUNT(*) as c FROM invoices WHERE workshop_id = ?').get(workshopId) as { c: number };
   const invoice_number = `INV-${(countRow.c + 1).toString().padStart(5, '0')}`;
@@ -118,9 +209,6 @@ export function createInvoice(req: Request, res: Response) {
   const computedGrandTotal = Math.round((subtotalBeforeTax + taxAmount) * 100) / 100;
   const grandTotal = explicitGrandTotal !== null && explicitGrandTotal > 0 ? explicitGrandTotal : computedGrandTotal;
 
-  const initPayAmt = initial_payment && initial_payment.amount
-    ? parseFloat(initial_payment.amount)
-    : (req.body.paid_amount !== undefined ? parseFloat(req.body.paid_amount) : 0);
   const paidAmount = Math.min(grandTotal, Math.max(0, initPayAmt));
   const balanceDue = Math.max(0, grandTotal - paidAmount);
 

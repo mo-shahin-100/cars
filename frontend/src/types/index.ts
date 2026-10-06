@@ -83,6 +83,9 @@ export interface Visit {
   color?: string;
   fuel_type?: string;
   transmission_type?: string;
+  invoice_id?: string;
+  invoice_number?: string;
+  invoice_status?: string;
 }
 
 export interface WorkshopProfile {
