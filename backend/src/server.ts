@@ -9,12 +9,26 @@ dotenv.config();
 
 const PORT = parseInt(process.env.PORT || '4000', 10);
 
+import { testPostgresConnection } from './database/pg';
+import { seedPostgresDatabase } from './database/seed.postgres';
+
 // Initialize database schema and ensure default records
-try {
-  seedDatabase();
-} catch (err) {
-  console.error('Failed to initialize database during startup:', err);
-}
+(async () => {
+  try {
+    const isPgConnected = await testPostgresConnection();
+    if (isPgConnected) {
+      console.log('🐘 [Database] PostgreSQL connected successfully! Initializing tables...');
+      await seedPostgresDatabase();
+      console.log('✅ [Database] PostgreSQL schema and seeds ready.');
+    } else {
+      console.log('ℹ️ [Database] PostgreSQL not detected at DATABASE_URL. Using local SQLite engine as active fallback.');
+      seedDatabase();
+    }
+  } catch (err) {
+    console.error('Failed to initialize database during startup, falling back to SQLite:', err);
+    try { seedDatabase(); } catch {}
+  }
+})();
 
 const server = http.createServer(app);
 
