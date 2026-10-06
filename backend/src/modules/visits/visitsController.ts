@@ -576,7 +576,7 @@ export function updateVisitStatus(req: Request, res: Response) {
 
   let whatsappData: any = null;
   if (status === 'ready') {
-    const inv = db.prepare('SELECT total_amount, balance_due FROM invoices WHERE visit_id = ? ORDER BY created_at DESC LIMIT 1').get(id) as any;
+    const inv = db.prepare('SELECT grand_total as total_amount, balance_due FROM invoices WHERE visit_id = ? ORDER BY created_at DESC LIMIT 1').get(id) as any;
     whatsappData = buildWhatsAppReadyData(visit, inv);
 
     // Save notification
@@ -635,7 +635,7 @@ export function getVisitWhatsAppReady(req: Request, res: Response) {
     return res.status(404).json({ success: false, error: 'الزيارة غير موجودة' });
   }
 
-  const inv = db.prepare('SELECT total_amount, balance_due FROM invoices WHERE visit_id = ? ORDER BY created_at DESC LIMIT 1').get(id) as any;
+  const inv = db.prepare('SELECT grand_total as total_amount, balance_due FROM invoices WHERE visit_id = ? ORDER BY created_at DESC LIMIT 1').get(id) as any;
   const whatsappData = buildWhatsAppReadyData(visit, inv);
 
   return res.json({
