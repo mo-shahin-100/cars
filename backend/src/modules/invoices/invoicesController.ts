@@ -501,7 +501,7 @@ export function deleteInvoice(req: Request, res: Response) {
       db.prepare('DELETE FROM invoices WHERE id = ? AND workshop_id = ?').run(id, workshopId);
 
       // Recalculate customer total balance due
-      const balanceRow = db.prepare('SELECT COALESCE(SUM(balance_due), 0) as total FROM invoices WHERE customer_id = ? AND status != "cancelled"').get(inv.customer_id) as any;
+      const balanceRow = db.prepare(`SELECT COALESCE(SUM(balance_due), 0) as total FROM invoices WHERE customer_id = ? AND status != 'cancelled'`).get(inv.customer_id) as any;
       db.prepare('UPDATE customers SET total_balance_due = ? WHERE id = ?').run(balanceRow?.total || 0, inv.customer_id);
     });
 
@@ -514,6 +514,14 @@ export function deleteInvoice(req: Request, res: Response) {
       entityId: id,
       action: 'DELETE',
       payload: { id },
+      originUserId: req.user?.id
+    });
+    broadcastEvent({
+      workshopId,
+      entity: 'customers',
+      entityId: inv.customer_id,
+      action: 'UPDATE',
+      payload: { id: inv.customer_id },
       originUserId: req.user?.id
     });
 
