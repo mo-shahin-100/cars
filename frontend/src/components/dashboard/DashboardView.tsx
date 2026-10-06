@@ -188,7 +188,14 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onQuic
       api.getCustomers().then(res => setCustomersList(res.data || [])).catch(() => {});
     }
     if (modal === 'new_payment') {
-      api.getInvoices('unpaid').then(res => setUnpaidInvoicesList(res.data || [])).catch(() => {});
+      api.getInvoices('due').then(res => {
+        const due = (res.data || []).filter((inv: any) => Number(inv.balance_due) > 0 && inv.status !== 'cancelled');
+        setUnpaidInvoicesList(due);
+      }).catch(() => {
+        api.getInvoices().then(r => {
+          setUnpaidInvoicesList((r.data || []).filter((inv: any) => Number(inv.balance_due) > 0 && inv.status !== 'cancelled'));
+        });
+      });
     }
   };
 
@@ -2018,12 +2025,41 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onQuic
                   className={`w-full p-2.5 rounded-xl border focus:outline-none focus:ring-1 focus:ring-teal-500 ${inputBg}`}
                 >
                   <option value="">-- اختر الفاتورة المطلوب سدادها --</option>
-                  {unpaidInvoicesList.map((inv) => (
-                    <option key={inv.id} value={inv.id}>
-                      #{inv.invoice_number} - {inv.customer_name} (المتبقي: {Number(inv.balance_due || 0).toLocaleString()} ج.م)
-                    </option>
-                  ))}
+                  {unpaidInvoicesList.length > 0 ? (
+                    unpaidInvoicesList.map((inv) => (
+                      <option key={inv.id} value={inv.id}>
+                        #{inv.invoice_number} - {inv.customer_name} {inv.plate_number ? `(${inv.plate_number})` : ''} - المتبقي: {Number(inv.balance_due || 0).toLocaleString()} ج.م
+                      </option>
+                    ))
+                  ) : (
+                    <option value="" disabled>-- لا توجد فواتير معلقة حالياً (جميع الفواتير مسددة بالكامل) --</option>
+                  )}
                 </select>
+
+                {paymentForm.invoice_id && (() => {
+                  const selectedInv = unpaidInvoicesList.find(x => x.id === paymentForm.invoice_id);
+                  if (!selectedInv) return null;
+                  return (
+                    <div className="p-3 rounded-xl bg-teal-500/10 border border-teal-500/30 text-xs text-slate-200 mt-2 space-y-1">
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">العميل والسيارة:</span>
+                        <span className="font-bold text-white">{selectedInv.customer_name} {selectedInv.plate_number ? `(${selectedInv.plate_number})` : ''}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">إجمالي الفاتورة:</span>
+                        <span className="font-mono">{Number(selectedInv.grand_total || 0).toLocaleString()} ج.م</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">المسدد سابقاً:</span>
+                        <span className="font-mono text-emerald-400 font-bold">{Number(selectedInv.paid_amount || 0).toLocaleString()} ج.م</span>
+                      </div>
+                      <div className="flex justify-between font-bold text-amber-400 pt-1.5 border-t border-teal-500/20">
+                        <span>المتبقي المطلوب سداده:</span>
+                        <span className="font-mono text-sm">{Number(selectedInv.balance_due || 0).toLocaleString()} ج.م</span>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               <div className="grid grid-cols-2 gap-3">

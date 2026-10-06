@@ -26,7 +26,9 @@ export function getInvoices(req: Request, res: Response) {
   `;
   const params: any[] = [workshopId];
 
-  if (status) {
+  if (status === 'due' || status === 'has_balance' || req.query.has_balance === 'true') {
+    sql += ` AND i.balance_due > 0 AND i.status != 'cancelled'`;
+  } else if (status) {
     sql += ` AND i.status = ?`;
     params.push(status);
   }
