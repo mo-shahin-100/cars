@@ -254,7 +254,7 @@ const MainApp: React.FC = () => {
       case 'purchases':
         return <PurchasesView />;
       case 'fluids':
-        return <FluidsView />;
+        return <InventoryView initialTab="stock" onTabChange={setActiveTab} />;
       case 'invoices':
         return <InvoicesView initialInvoiceId={targetSearch?.id} initialSearch={targetSearch?.search} />;
       case 'expenses':

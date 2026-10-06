@@ -188,7 +188,7 @@ export function getDashboardStats(req: Request, res: Response) {
       description: 'عملاء حان أو قرب موعد صيانتهم الدورية القادمة',
       severity: upcomingMaintenanceCount > 0 ? 'info' : 'info',
       actionLabel: 'استعراض المواعيد',
-      targetTab: 'fluids',
+      targetTab: 'maintenance',
       filter: 'upcoming'
     }
   ].filter(a => a.count > 0);

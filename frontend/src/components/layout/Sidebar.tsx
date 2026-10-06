@@ -86,7 +86,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpe
   // 4. باقي بنود الإدارة والعمليات
   const secondaryItems = [
     { id: 'purchases',       label: 'الموردين والمشتريات',           icon: Truck },
-    { id: 'fluids',          label: 'الزيوت والسوائل',               icon: Droplet },
     { id: 'invoices',        label: 'الفواتير والمدفوعات',           icon: Receipt },
     { id: 'expenses',        label: 'المصروفات',                    icon: WalletCards },
     { id: 'reports',         label: 'التقارير المالية والإنتاجية',   icon: BarChart3 },
