@@ -62,7 +62,7 @@ export const MechanicWorkstation: React.FC = () => {
     formData.append('work_order_id', workOrderId);
     if (taskId) formData.append('task_id', taskId);
     formData.append('category', 'damage');
-    formData.append('caption', 'صورة من باحة العمل الميدانية للفني');
+    formData.append('caption', 'صورة من جوة الورشة للفني');
 
     try {
       await api.uploadAttachment(formData);

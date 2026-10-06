@@ -134,7 +134,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onQuic
       <div>
         <h3 className={`text-sm font-black mb-3 flex items-center gap-2 tracking-wide ${headCls}`}>
           <Car className="w-4 h-4 text-sky-500" />
-          حالة السيارات داخل باحة الورشة
+          حالة السيارات جوة الورشة
         </h3>
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
           {[
