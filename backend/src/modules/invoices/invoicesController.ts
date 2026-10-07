@@ -15,6 +15,7 @@ export function getInvoices(req: Request, res: Response) {
       i.*,
       c.full_name as customer_name, c.phone as customer_phone, c.customer_code,
       veh.plate_number, veh.make, veh.model,
+      veh.current_odometer, veh.next_maintenance_km, veh.next_maintenance_date, veh.next_maintenance_notes, veh.last_maintenance_km,
       v.visit_number,
       u.full_name as created_by_name
     FROM invoices i
@@ -56,6 +57,7 @@ export function getInvoiceById(req: Request, res: Response) {
       i.*,
       c.full_name as customer_name, c.phone as customer_phone, c.customer_code, c.address as customer_address,
       veh.plate_number, veh.vin, veh.make, veh.model, veh.year,
+      veh.current_odometer, veh.next_maintenance_km, veh.next_maintenance_date, veh.next_maintenance_notes, veh.last_maintenance_km,
       v.visit_number, v.odometer_in,
       u.full_name as created_by_name,
       w.name as workshop_name, w.commercial_reg, w.tax_number, w.phone as workshop_phone, w.address as workshop_address
@@ -334,12 +336,22 @@ export function createInvoice(req: Request, res: Response) {
       `).run(balanceDue, customer_id);
     }
 
-    // 5. Update vehicle total spent
+    // 5. Update vehicle total spent & next maintenance schedule if provided
     db.prepare(`
       UPDATE vehicles 
-      SET total_spent = total_spent + ?, updated_at = CURRENT_TIMESTAMP
+      SET total_spent = total_spent + ?,
+          next_maintenance_km = COALESCE(?, next_maintenance_km),
+          next_maintenance_notes = COALESCE(?, next_maintenance_notes),
+          last_maintenance_km = COALESCE(?, last_maintenance_km),
+          updated_at = CURRENT_TIMESTAMP
       WHERE id = ?
-    `).run(grandTotal, vehicle_id);
+    `).run(
+      grandTotal,
+      req.body.next_maintenance_km ? parseInt(req.body.next_maintenance_km, 10) : null,
+      req.body.next_maintenance_notes?.trim() || null,
+      req.body.odometer_in ? parseInt(req.body.odometer_in, 10) : null,
+      vehicle_id
+    );
 
     // 6. Connect to Visit: Automatically advance visit status to 'ready' if still in progress
     db.prepare(`

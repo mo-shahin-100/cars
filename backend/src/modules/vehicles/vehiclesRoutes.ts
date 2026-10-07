@@ -6,6 +6,7 @@ import {
   createVehicle,
   updateVehicle,
   updateMaintenanceSchedule,
+  getVehicleWhatsAppMaintenance,
   transferOwnership,
   deleteVehicle
 } from './vehiclesController';
@@ -18,6 +19,7 @@ router.use(authenticate);
 
 router.get('/', requirePermission('vehicles.view'), getVehicles);
 router.get('/:id', requirePermission('vehicles.view'), getVehicleById);
+router.get('/:id/whatsapp-maintenance', requirePermission('vehicles.view'), getVehicleWhatsAppMaintenance);
 router.get('/:id/timeline', requirePermission('vehicles.view'), getVehicleTimeline);
 router.post('/', requirePermission('vehicles.create'), createVehicle);
 router.put('/:id', requirePermission('vehicles.update'), updateVehicle);

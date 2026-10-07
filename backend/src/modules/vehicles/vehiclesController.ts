@@ -695,3 +695,102 @@ export function deleteVehicle(req: Request, res: Response) {
   }
 }
 
+export function getVehicleWhatsAppMaintenance(req: Request, res: Response) {
+  const workshopId = req.user?.workshop_id || 'ws_default_01';
+  const { id } = req.params;
+
+  const vehicle = db.prepare(`
+    SELECT v.*,
+           c.full_name as customer_name, c.phone as customer_phone,
+           w.name as workshop_name, w.phone as workshop_phone, w.address as workshop_address
+    FROM vehicles v
+    JOIN customers c ON v.current_owner_id = c.id
+    LEFT JOIN workshops w ON v.workshop_id = w.id
+    WHERE v.id = ? AND v.workshop_id = ?
+  `).get(id, workshopId) as any;
+
+  if (!vehicle) {
+    return res.status(404).json({ success: false, error: 'السيارة غير موجودة' });
+  }
+
+  const workshopName = vehicle.workshop_name || 'مركز النخبة المتقدم لصيانة وبرمجة السيارات';
+  const workshopPhone = vehicle.workshop_phone || '';
+  const vehicleName = `${vehicle.make || ''} ${vehicle.model || ''} ${vehicle.year || ''}`.trim();
+  const customerName = vehicle.customer_name || 'العميل الكريم';
+  const plateNumber = vehicle.plate_number || '';
+  const phone = vehicle.customer_phone || '';
+  const currentOdo = Number(vehicle.current_odometer || 0);
+  const nextKm = Number(vehicle.next_maintenance_km || 0);
+  const diffKm = nextKm > 0 ? nextKm - currentOdo : null;
+  const notes = vehicle.next_maintenance_notes || 'صيانة دورية وتغيير الزيوت وفحص العفشة والمكابح';
+
+  let urgencyText = '📅 تذكير بموعد الصيانة الدورية المجدولة';
+  if (diffKm !== null && diffKm <= 0) {
+    urgencyText = '⚠️ تنبيه عاجل: حان موعد الصيانة الدورية الآن لتفادي أي أعطال';
+  } else if (diffKm !== null && diffKm <= 1500) {
+    urgencyText = `⏳ تنبيه: اقترب موعد الصيانة القادمة (متبقي ${diffKm.toLocaleString()} كم تقريباً)`;
+  }
+
+  let message = `السلام عليكم ورحمة الله وبركاته 🌹\n`;
+  message += `أهلاً بك أستاذ/ *${customerName}*\n\n`;
+  message += `${urgencyText}\n\n`;
+  message += `🚗 *بيانات سيارتكم:* ${vehicleName}\n`;
+  message += `🔢 *رقم اللوحة:* ${plateNumber}\n`;
+  if (currentOdo > 0) {
+    message += `📊 *قراءة العداد المسجلة:* ${currentOdo.toLocaleString()} كم\n`;
+  }
+  if (nextKm > 0) {
+    message += `🎯 *العداد المستهدف للصيانة:* ${nextKm.toLocaleString()} كم\n`;
+    if (diffKm !== null) {
+      if (diffKm > 0) {
+        message += `⏳ *المتبقي على الصيانة:* ${diffKm.toLocaleString()} كم تقريباً\n`;
+      } else {
+        message += `⚠️ *تجاوزت الصيانة بمقدار:* ${Math.abs(diffKm).toLocaleString()} كم\n`;
+      }
+    }
+  }
+  if (vehicle.next_maintenance_date) {
+    message += `📅 *الموعد المقترح:* ${vehicle.next_maintenance_date.split('T')[0]}\n`;
+  }
+  message += `\n🔧 *أعمال وتوصيات الصيانة الموصى بها:* \n`;
+  message += `• ${notes}\n\n`;
+  message += `حرصاً على سلامتك وكفاءة سيارتك، نوصي بحجز موعد صيانة وتجهيز قطع الغيار مسبقاً.\n`;
+  message += `لحجز موعدك أو الاستفسار، يمكنك الرد مباشرة على هذه الرسالة 🤝\n\n`;
+  message += `*${workshopName}*\n`;
+  if (workshopPhone) {
+    message += `📞 للتواصل والاستفسار: ${workshopPhone}`;
+  }
+
+  let cleanPhone = phone.replace(/[^0-9]/g, '');
+  if (cleanPhone.startsWith('00')) cleanPhone = cleanPhone.substring(2);
+  if (cleanPhone.startsWith('01') && cleanPhone.length === 11) {
+    cleanPhone = '20' + cleanPhone.substring(1);
+  } else if ((cleanPhone.startsWith('10') || cleanPhone.startsWith('11') || cleanPhone.startsWith('12') || cleanPhone.startsWith('15')) && cleanPhone.length === 10) {
+    cleanPhone = '20' + cleanPhone;
+  } else if (cleanPhone.startsWith('05') && cleanPhone.length === 10) {
+    cleanPhone = '966' + cleanPhone.substring(1);
+  } else if (cleanPhone.startsWith('5') && cleanPhone.length === 9) {
+    cleanPhone = '966' + cleanPhone;
+  }
+
+  const whatsappUrl = `https://api.whatsapp.com/send?phone=${cleanPhone}&text=${encodeURIComponent(message)}`;
+
+  return res.json({
+    success: true,
+    data: {
+      phone,
+      cleanPhone,
+      customerName,
+      vehicleName,
+      plateNumber,
+      visitNumber: '',
+      currentOdometer: currentOdo,
+      nextMaintenanceKm: nextKm,
+      diffKm,
+      notes,
+      message,
+      whatsappUrl
+    }
+  });
+}
+

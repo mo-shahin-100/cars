@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Receipt, Plus, Search, Printer, DollarSign, Calendar, CheckCircle2, AlertCircle, X, CreditCard, Trash2, FileText } from 'lucide-react';
+import { Receipt, Plus, Search, Printer, DollarSign, Calendar, CheckCircle2, AlertCircle, X, CreditCard, Trash2, FileText, Wrench, Gauge, Clock, MessageCircle } from 'lucide-react';
 import { api } from '../../services/api';
 import { Invoice, Visit } from '../../types';
 import { useSync } from '../../context/SyncContext';
 import { VehicleHandoverReportModal } from '../visits/VehicleHandoverReportModal';
+import { WhatsAppReadyModal, WhatsAppData } from '../common/WhatsAppReadyModal';
 
 interface InvoicesViewProps {
   initialInvoiceId?: string;
@@ -18,6 +19,7 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({ initialInvoiceId, in
   const [searchQuery, setSearchQuery] = useState(initialSearch || '');
   const [selectedInvoice, setSelectedInvoice] = useState<any | null>(null);
   const [reportVisitId, setReportVisitId] = useState<string | null>(null);
+  const [whatsAppModalData, setWhatsAppModalData] = useState<WhatsAppData | null>(null);
 
   // Modals
   const [showAddModal, setShowAddModal] = useState(false);
@@ -31,6 +33,8 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({ initialInvoiceId, in
     fluids_total: 0,
     discount_amount: 0,
     tax_percent: 15,
+    next_maintenance_km: '',
+    next_maintenance_notes: '',
     notes: ''
   });
 
@@ -90,6 +94,17 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({ initialInvoiceId, in
     }
   };
 
+  const handleSendWhatsAppMaintenance = async (vehicleId: string) => {
+    try {
+      const res = await api.getVehicleWhatsAppMaintenance(vehicleId);
+      if (res?.data) {
+        setWhatsAppModalData(res.data);
+      }
+    } catch (err: any) {
+      alert(err.message || 'فشل في تجهيز رسالة تذكير الصيانة عبر واتساب');
+    }
+  };
+
   const handleOpenPaymentDirect = async (inv: Invoice) => {
     try {
       const res = await api.getInvoiceById(inv.id);
@@ -140,11 +155,15 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({ initialInvoiceId, in
           }
         }
         const fluids = (res.data.fluids || []).reduce((sum: number, f: any) => sum + (Number(f.price) || 0), 0);
+        const currentOdo = Number(res.data.odometer_in || res.data.current_odometer || 0);
+        const suggestedNextKm = res.data.next_maintenance_km || (currentOdo > 0 ? currentOdo + 10000 : '');
         setFormData(prev => ({
           ...prev,
           labor_total: labor > 0 ? labor : prev.labor_total,
           parts_total: parts > 0 ? parts : 0,
-          fluids_total: fluids > 0 ? fluids : 0
+          fluids_total: fluids > 0 ? fluids : 0,
+          next_maintenance_km: prev.next_maintenance_km || (suggestedNextKm ? String(suggestedNextKm) : ''),
+          next_maintenance_notes: prev.next_maintenance_notes || res.data.next_maintenance_notes || 'صيانة دورية وتغيير زيوت وفلاتر'
         }));
       }
     } catch (e) {
@@ -165,9 +184,23 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({ initialInvoiceId, in
       await api.createInvoice({
         ...formData,
         customer_id: vis.customer_id,
-        vehicle_id: vis.vehicle_id
+        vehicle_id: vis.vehicle_id,
+        odometer_in: vis.odometer_in,
+        next_maintenance_km: formData.next_maintenance_km ? parseInt(formData.next_maintenance_km, 10) : undefined,
+        next_maintenance_notes: formData.next_maintenance_notes?.trim() || undefined
       });
       setShowAddModal(false);
+      setFormData({
+        visit_id: '',
+        labor_total: 250,
+        parts_total: 0,
+        fluids_total: 0,
+        discount_amount: 0,
+        tax_percent: 15,
+        next_maintenance_km: '',
+        next_maintenance_notes: '',
+        notes: ''
+      });
       loadData();
     } catch (err: any) {
       alert(err.message);
@@ -220,47 +253,55 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({ initialInvoiceId, in
   return (
     <div className="space-y-6">
       {/* Top Bar */}
+      {/* Top Bar & Quick Filter Tabs */}
       <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2 overflow-x-auto text-xs pb-1 sm:pb-0">
           <button
             onClick={() => setStatusFilter('')}
-            className={`px-3.5 py-2 rounded-xl font-bold whitespace-nowrap transition-all ${
+            className={`px-4 py-2 rounded-xl font-bold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
               statusFilter === ''
                 ? 'bg-white text-slate-950 font-black shadow-md shadow-white/10'
                 : 'bg-white/[0.04] border border-white/[0.08] text-slate-400 hover:text-white'
             }`}
           >
-            جميع الفواتير
+            <span>الكل</span>
+            <span className={`font-mono text-[11px] px-2 py-0.5 rounded-full ${
+              statusFilter === '' ? 'bg-slate-900 text-white' : 'bg-slate-800 text-slate-300'
+            }`}>
+              {invoices.length}
+            </span>
           </button>
+
           <button
-            onClick={() => setStatusFilter('unpaid')}
-            className={`px-3.5 py-2 rounded-xl font-bold whitespace-nowrap transition-all ${
-              statusFilter === 'unpaid'
-                ? 'bg-rose-500 text-white font-black shadow-md shadow-rose-500/20'
-                : 'bg-white/[0.04] border border-white/[0.08] text-slate-400 hover:text-white'
-            }`}
-          >
-            غير مسددة
-          </button>
-          <button
-            onClick={() => setStatusFilter('partially_paid')}
-            className={`px-3.5 py-2 rounded-xl font-bold whitespace-nowrap transition-all ${
-              statusFilter === 'partially_paid'
+            onClick={() => setStatusFilter('has_balance')}
+            className={`px-4 py-2 rounded-xl font-bold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
+              statusFilter === 'has_balance'
                 ? 'bg-amber-500 text-slate-950 font-black shadow-md shadow-amber-500/20'
-                : 'bg-white/[0.04] border border-white/[0.08] text-slate-400 hover:text-white'
+                : 'bg-white/[0.04] border border-white/[0.08] text-amber-400 hover:bg-amber-500/10'
             }`}
           >
-            مسددة جزئياً
+            <span>فواتير بها متبقي (تحصيل)</span>
+            <span className={`font-mono text-[11px] px-2 py-0.5 rounded-full font-bold ${
+              statusFilter === 'has_balance' ? 'bg-slate-950 text-amber-300' : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+            }`}>
+              {invoices.filter(i => Number(i.balance_due) > 0).length}
+            </span>
           </button>
+
           <button
             onClick={() => setStatusFilter('paid')}
-            className={`px-3.5 py-2 rounded-xl font-bold whitespace-nowrap transition-all ${
+            className={`px-4 py-2 rounded-xl font-bold whitespace-nowrap transition-all flex items-center gap-1.5 cursor-pointer ${
               statusFilter === 'paid'
                 ? 'bg-emerald-500 text-slate-950 font-black shadow-md shadow-emerald-500/20'
-                : 'bg-white/[0.04] border border-white/[0.08] text-slate-400 hover:text-white'
+                : 'bg-white/[0.04] border border-white/[0.08] text-emerald-400 hover:bg-emerald-500/10'
             }`}
           >
-            مسددة بالكامل
+            <span>مسددة بالكامل ✓</span>
+            <span className={`font-mono text-[11px] px-2 py-0.5 rounded-full font-bold ${
+              statusFilter === 'paid' ? 'bg-slate-950 text-emerald-300' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+            }`}>
+              {invoices.filter(i => i.status === 'paid' || Number(i.balance_due) <= 0).length}
+            </span>
           </button>
         </div>
 
@@ -294,6 +335,36 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({ initialInvoiceId, in
           </button>
         </div>
       </div>
+
+      {/* Quick Collection Summary Banner when filtering by has_balance */}
+      {statusFilter === 'has_balance' && (
+        <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs shadow-sm animate-in fade-in duration-200">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-lg border border-amber-500/30 shrink-0">
+              💰
+            </div>
+            <div>
+              <h4 className="font-bold text-white text-sm flex items-center gap-2">
+                <span>فواتير بانتظار التحصيل والسداد السريع</span>
+                <span className="text-[10px] bg-amber-500/20 text-amber-300 font-mono font-bold px-2 py-0.5 rounded-full border border-amber-500/30">
+                  {invoices.filter(i => Number(i.balance_due) > 0).length} فاتورة
+                </span>
+              </h4>
+              <p className="text-slate-400 text-xs mt-0.5">
+                يمكنك الضغط على زر <strong className="text-emerald-400">"سداد"</strong> الأخضر أمام أي فاتورة لتسجيل دفعة كاش أو شبكة فوراً وتوليد سند القبض
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 font-mono bg-slate-950/80 px-4 py-2.5 rounded-xl border border-slate-800 shrink-0">
+            <div className="text-left sm:text-right">
+              <span className="text-slate-400 text-[11px] block">إجمالي المتبقي للتحصيل:</span>
+              <span className="text-amber-400 font-black text-lg">
+                {invoices.reduce((sum, inv) => sum + (Number(inv.balance_due) || 0), 0).toLocaleString()} ج.م
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Invoices Table */}
       <div className="glass-card rounded-2xl overflow-hidden">
@@ -329,13 +400,13 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({ initialInvoiceId, in
                     <td className="py-3 px-4 text-slate-300">
                       {inv.make} {inv.model} ({inv.plate_number})
                     </td>
-                    <td className="py-3 px-4 font-mono font-bold text-white">{inv.grand_total.toLocaleString()} ج.م</td>
-                    <td className="py-3 px-4 font-mono text-emerald-400">{inv.paid_amount.toLocaleString()} ج.م</td>
+                    <td className="py-3 px-4 font-mono font-bold text-slate-100 text-sm">{inv.grand_total.toLocaleString()} ج.م</td>
+                    <td className="py-3 px-4 font-mono text-emerald-400 font-bold">{inv.paid_amount.toLocaleString()} ج.م</td>
                     <td className="py-3 px-4 font-mono">
                       {inv.balance_due > 0 ? (
-                        <span className="text-amber-400 font-bold">{inv.balance_due.toLocaleString()} ج.م</span>
+                        <span className="text-amber-400 font-black bg-amber-500/10 px-2 py-0.5 rounded-md border border-amber-500/20">{inv.balance_due.toLocaleString()} ج.م</span>
                       ) : (
-                        <span className="text-slate-500 font-normal">0.00</span>
+                        <span className="text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-md border border-emerald-500/20">0.00 (خالص ✓)</span>
                       )}
                     </td>
                     <td className="py-3 px-4">
@@ -477,6 +548,36 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({ initialInvoiceId, in
                 </div>
               </div>
 
+              {/* Next Periodic Maintenance Scheduling */}
+              <div className="bg-sky-950/30 border border-sky-800/40 rounded-xl p-3 space-y-2">
+                <div className="flex items-center gap-1.5 text-xs font-bold text-sky-400">
+                  <Wrench className="w-3.5 h-3.5" />
+                  <span>توصيات وجدولة الصيانة للزيارة القادمة (تطبع بالفاتورة)</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">العداد المستهدف للصيانة القادمة (كم)</label>
+                    <input
+                      type="number"
+                      placeholder="مثلاً: 60000"
+                      value={formData.next_maintenance_km}
+                      onChange={(e) => setFormData({ ...formData, next_maintenance_km: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-amber-300 focus:outline-none focus:border-sky-500 font-mono font-bold"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-300 mb-1">توصيات وأعمال الزيارة القادمة</label>
+                    <input
+                      type="text"
+                      placeholder="مثال: تغيير عفشة، فحص تيل الفرامل، سيور..."
+                      value={formData.next_maintenance_notes}
+                      onChange={(e) => setFormData({ ...formData, next_maintenance_notes: e.target.value })}
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-sky-500"
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
                 <button
                   type="button"
@@ -567,6 +668,46 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({ initialInvoiceId, in
                     <p className="text-slate-400">السيارة: <strong className="text-slate-100">{selectedInvoice.make} {selectedInvoice.model}</strong></p>
                     <p className="text-slate-400 font-mono mt-0.5">اللوحة: {selectedInvoice.plate_number}</p>
                   </div>
+                </div>
+
+                {/* Maintenance & Periodic Schedule Card */}
+                <div className="mt-3 pt-3 border-t border-slate-800 bg-sky-950/20 border border-sky-800/30 rounded-xl p-3 text-xs space-y-2">
+                  <div className="flex items-center justify-between text-sky-400 font-bold">
+                    <span className="flex items-center gap-1.5">
+                      <Gauge className="w-3.5 h-3.5" />
+                      <span>بيانات الصيانة الدورية والعداد:</span>
+                    </span>
+                    <span className="font-mono text-white text-xs font-bold bg-slate-900 px-2 py-0.5 rounded border border-slate-800">
+                      عداد الدخول: {selectedInvoice.odometer_in ? `${Number(selectedInvoice.odometer_in).toLocaleString()} كم` : 'غير مسجل'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-sky-500/20">
+                    <div>
+                      <span className="text-slate-400 block text-[11px] mb-0.5">الصيانة الدورية القادمة:</span>
+                      <strong className="text-amber-400 font-mono text-sm font-black">
+                        {selectedInvoice.next_maintenance_km ? `${Number(selectedInvoice.next_maintenance_km).toLocaleString()} كم` : 'لم تحدد بعد'}
+                      </strong>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block text-[11px] mb-0.5">توصيات وأعمال الزيارة القادمة:</span>
+                      <p className="text-slate-200 text-xs font-semibold">
+                        {selectedInvoice.next_maintenance_notes || 'صيانة دورية عادية'}
+                      </p>
+                    </div>
+                  </div>
+                  {selectedInvoice.vehicle_id && (
+                    <div className="pt-2 border-t border-sky-500/20 flex justify-end no-print">
+                      <button
+                        type="button"
+                        onClick={() => handleSendWhatsAppMaintenance(selectedInvoice.vehicle_id)}
+                        className="flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 text-slate-950 px-3 py-1.5 rounded-lg text-xs font-black shadow-sm transition-all cursor-pointer"
+                        title="إرسال تذكير بموعد وتوصيات الصيانة القادمة للعميل عبر واتساب"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5" />
+                        <span>إرسال تذكير بالصيانة عبر واتساب</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -732,6 +873,13 @@ export const InvoicesView: React.FC<InvoicesViewProps> = ({ initialInvoiceId, in
         isOpen={!!reportVisitId}
         onClose={() => setReportVisitId(null)}
         onDataUpdated={loadData}
+      />
+
+      {/* WhatsApp Maintenance Reminder Modal */}
+      <WhatsAppReadyModal
+        data={whatsAppModalData}
+        isOpen={!!whatsAppModalData}
+        onClose={() => setWhatsAppModalData(null)}
       />
     </div>
   );

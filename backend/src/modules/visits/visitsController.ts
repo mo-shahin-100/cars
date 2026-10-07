@@ -59,6 +59,7 @@ export function getVisitById(req: Request, res: Response) {
     SELECT 
       v.*,
       veh.plate_number, veh.vin, veh.make, veh.model, veh.year, veh.color, veh.fuel_type, veh.transmission_type,
+      veh.current_odometer, veh.next_maintenance_km, veh.next_maintenance_date, veh.next_maintenance_notes, veh.last_maintenance_km,
       c.full_name as customer_name, c.phone as customer_phone, c.customer_code,
       u.full_name as received_by_name,
       del.full_name as delivered_by_name
@@ -470,7 +471,7 @@ function buildWhatsAppReadyData(visit: any, invoice: any) {
 export function updateVisitStatus(req: Request, res: Response) {
   const workshopId = req.user?.workshop_id || 'ws_default_01';
   const { id } = req.params;
-  const { status, notes, odometer_out } = req.body;
+  const { status, notes, odometer_out, next_maintenance_km, next_maintenance_notes } = req.body;
 
   const validStatuses = [
     'received',
@@ -521,6 +522,20 @@ export function updateVisitStatus(req: Request, res: Response) {
       UPDATE visits SET status = ?, notes = COALESCE(?, notes), odometer_out = COALESCE(?, odometer_out), updated_at = CURRENT_TIMESTAMP
       WHERE id = ? AND workshop_id = ?
     `).run(status, notes || null, odoOut, id, workshopId);
+  }
+
+  if (next_maintenance_km || next_maintenance_notes) {
+    db.prepare(`
+      UPDATE vehicles 
+      SET next_maintenance_km = COALESCE(?, next_maintenance_km),
+          next_maintenance_notes = COALESCE(?, next_maintenance_notes),
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(
+      next_maintenance_km ? parseInt(next_maintenance_km, 10) : null,
+      next_maintenance_notes?.trim() || null,
+      visit.vehicle_id
+    );
   }
 
   // Auto-sync with Work Orders & Diagnostics tables for the 4 maintenance categories

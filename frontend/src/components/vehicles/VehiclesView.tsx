@@ -17,13 +17,15 @@ import {
   Trash2,
   Wrench,
   AlertCircle,
-  CheckCircle2
+  CheckCircle2,
+  MessageCircle
 } from 'lucide-react';
 import { api } from '../../services/api';
 import { Vehicle, Customer } from '../../types';
 import { useSync } from '../../context/SyncContext';
 import { LicensePlateInput } from '../common/LicensePlateInput';
 import { CarBrandModelSelector } from './CarBrandModelSelector';
+import { WhatsAppReadyModal, WhatsAppData } from '../common/WhatsAppReadyModal';
 
 interface VehiclesViewProps {
   initialSearch?: string;
@@ -43,6 +45,7 @@ export const VehiclesView: React.FC<VehiclesViewProps> = ({ initialSearch, initi
   const [timelineData, setTimelineData] = useState<any | null>(null);
   const [timelineFilter, setTimelineFilter] = useState<string>('all');
   const [timelineLoading, setTimelineLoading] = useState(false);
+  const [whatsAppModalData, setWhatsAppModalData] = useState<WhatsAppData | null>(null);
 
   // Form states
   const [formData, setFormData] = useState({
@@ -175,6 +178,17 @@ export const VehiclesView: React.FC<VehiclesViewProps> = ({ initialSearch, initi
       alert(err.message || 'فشل حفظ جدول الصيانة');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleSendWhatsAppMaintenance = async (vehicleId: string) => {
+    try {
+      const res = await api.getVehicleWhatsAppMaintenance(vehicleId);
+      if (res?.data) {
+        setWhatsAppModalData(res.data);
+      }
+    } catch (err: any) {
+      alert(err.message || 'فشل في تجهيز رسالة تذكير الصيانة عبر واتساب');
     }
   };
 
@@ -374,6 +388,16 @@ export const VehiclesView: React.FC<VehiclesViewProps> = ({ initialSearch, initi
 
                       <td className="py-3 px-4 text-center">
                         <div className="flex items-center justify-center gap-1.5">
+                          {/* زر تذكير الصيانة عبر واتساب */}
+                          <button
+                            onClick={() => handleSendWhatsAppMaintenance(v.id)}
+                            className="flex items-center gap-1 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-slate-950 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all border border-emerald-500/30 cursor-pointer"
+                            title="إرسال تذكير بموعد وتوصيات الصيانة للعميل عبر واتساب"
+                          >
+                            <MessageCircle className="w-3.5 h-3.5" />
+                            <span>تذكير واتساب</span>
+                          </button>
+
                           {/* زر جدول الصيانة الدورية والخطة القادمة */}
                           <button
                             onClick={() => handleOpenScheduleModal(v)}
@@ -891,22 +915,36 @@ export const VehiclesView: React.FC<VehiclesViewProps> = ({ initialSearch, initi
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
-                <button
-                  type="button"
-                  onClick={() => setShowScheduleModal(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800"
-                >
-                  إلغاء
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="bg-amber-500 hover:bg-amber-400 text-slate-950 px-5 py-2 rounded-xl text-xs font-bold shadow-lg shadow-amber-500/20 disabled:opacity-50 flex items-center gap-1.5"
-                >
-                  <Wrench className="w-3.5 h-3.5" />
-                  <span>{submitting ? 'جاري الحفظ...' : 'حفظ جدول وخطة الصيانة'}</span>
-                </button>
+              <div className="flex items-center justify-between gap-2 pt-3 border-t border-slate-800">
+                {vehicleForSchedule && (
+                  <button
+                    type="button"
+                    onClick={() => handleSendWhatsAppMaintenance(vehicleForSchedule.id)}
+                    className="px-3.5 py-2 rounded-xl text-xs font-bold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500 hover:text-slate-950 border border-emerald-500/30 flex items-center gap-1.5 transition-all cursor-pointer"
+                    title="تجهيز رسالة تذكير وإرسالها للعميل عبر واتساب"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5" />
+                    <span>تذكير العميل بالواتساب 📲</span>
+                  </button>
+                )}
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowScheduleModal(false)}
+                    className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-400 hover:text-white hover:bg-slate-800"
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="bg-amber-500 hover:bg-amber-400 text-slate-950 px-5 py-2 rounded-xl text-xs font-bold shadow-lg shadow-amber-500/20 disabled:opacity-50 flex items-center gap-1.5"
+                  >
+                    <Wrench className="w-3.5 h-3.5" />
+                    <span>{submitting ? 'جاري الحفظ...' : 'حفظ جدول وخطة الصيانة'}</span>
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -1159,6 +1197,13 @@ export const VehiclesView: React.FC<VehiclesViewProps> = ({ initialSearch, initi
           </div>
         </div>
       )}
+
+      {/* WhatsApp Maintenance Reminder Modal */}
+      <WhatsAppReadyModal
+        data={whatsAppModalData}
+        isOpen={!!whatsAppModalData}
+        onClose={() => setWhatsAppModalData(null)}
+      />
     </div>
   );
 };
