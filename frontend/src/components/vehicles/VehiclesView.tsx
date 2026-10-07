@@ -448,16 +448,17 @@ export const VehiclesView: React.FC<VehiclesViewProps> = ({ initialSearch, initi
 
       {/* Register Vehicle Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150">
-            <div className="p-4 border-b border-slate-800 flex items-center justify-between">
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150 my-auto">
+            <div className="p-4 border-b border-slate-800 flex items-center justify-between shrink-0 bg-slate-950/40">
               <h3 className="font-bold text-base text-white">تسجيل سيارة جديدة</h3>
               <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-white">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateVehicle} className="p-5 space-y-4">
+            <form onSubmit={handleCreateVehicle} className="flex flex-col flex-1 overflow-hidden min-h-0">
+              <div className="p-5 space-y-4 overflow-y-auto flex-1 custom-scrollbar">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-slate-300 mb-1">
@@ -692,7 +693,9 @@ export const VehiclesView: React.FC<VehiclesViewProps> = ({ initialSearch, initi
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+              </div>
+
+              <div className="flex items-center justify-end gap-2 p-4 border-t border-slate-800 shrink-0 bg-slate-950/60">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
@@ -781,9 +784,9 @@ export const VehiclesView: React.FC<VehiclesViewProps> = ({ initialSearch, initi
 
       {/* Maintenance Schedule & Next Visit Planning Modal */}
       {showScheduleModal && vehicleForSchedule && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150">
-            <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/60">
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg max-h-[90vh] flex flex-col overflow-hidden shadow-2xl animate-in zoom-in-95 duration-150 my-auto">
+            <div className="p-4 border-b border-slate-800 flex items-center justify-between bg-slate-950/60 shrink-0">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
                   <Wrench className="w-5 h-5" />
@@ -800,7 +803,8 @@ export const VehiclesView: React.FC<VehiclesViewProps> = ({ initialSearch, initi
               </button>
             </div>
 
-            <form onSubmit={handleSaveSchedule} className="p-5 space-y-4">
+            <form onSubmit={handleSaveSchedule} className="flex flex-col flex-1 overflow-hidden min-h-0">
+              <div className="p-5 space-y-4 overflow-y-auto flex-1 custom-scrollbar">
               {/* Odometer Banner */}
               <div className="bg-slate-950/80 border border-slate-800 p-3.5 rounded-xl flex items-center justify-between">
                 <div className="flex items-center gap-2">
@@ -915,7 +919,9 @@ export const VehiclesView: React.FC<VehiclesViewProps> = ({ initialSearch, initi
                 </div>
               </div>
 
-              <div className="flex items-center justify-between gap-2 pt-3 border-t border-slate-800">
+              </div>
+
+              <div className="flex items-center justify-between gap-2 p-4 border-t border-slate-800 shrink-0 bg-slate-950/60">
                 {vehicleForSchedule && (
                   <button
                     type="button"

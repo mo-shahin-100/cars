@@ -5,15 +5,10 @@ import { runSuppliersMigration } from './migrate_suppliers';
 
 export function seedDatabase() {
   initDatabase();
-  runSuppliersMigration();
 
   const workshopCount = db.prepare('SELECT COUNT(*) as count FROM workshops').get() as { count: number };
-  if (workshopCount.count > 0) {
-    console.log('Database already seeded. Skipping initial seeding.');
-    return;
-  }
-
-  console.log('Seeding initial workshop, roles, permissions, users, and DTC library...');
+  if (workshopCount.count === 0) {
+    console.log('Seeding initial workshop, roles, permissions, users, and DTC library...');
 
   const workshopId = 'ws_default_01';
   db.prepare(`
@@ -257,7 +252,13 @@ export function seedDatabase() {
     insertPart.run(p.id, workshopId, p.pn, p.name, p.cat, p.brand, p.type, p.cost, p.sale, p.stock, p.min, p.loc);
   }
 
-  console.log('Seeding finished successfully.');
+    console.log('Seeding finished successfully.');
+  } else {
+    console.log('Database already seeded. Skipping initial seeding.');
+  }
+
+  runSuppliersMigration();
+  initDatabase();
 }
 
 if (require.main === module) {

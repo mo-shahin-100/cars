@@ -42,6 +42,7 @@ import { useSync } from '../../context/SyncContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
 import { WhatsAppReadyModal, WhatsAppData } from '../common/WhatsAppReadyModal';
+import { LicensePlateInput } from '../common/LicensePlateInput';
 
 interface DashboardViewProps {
   onNavigate: (tab: string, targetId?: string, searchParam?: string) => void;
@@ -1674,14 +1675,13 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onQuic
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-400 mb-1 font-bold">رقم اللوحة *</label>
-                  <input
-                    type="text"
+                  <label className="block text-slate-400 mb-1 font-bold">
+                    رقم اللوحة * <span className="text-[11px] font-normal text-slate-500">(3 حروف + 3 أرقام)</span>
+                  </label>
+                  <LicensePlateInput
                     required
                     value={vehicleForm.plate_number}
-                    onChange={(e) => setVehicleForm({ ...vehicleForm, plate_number: e.target.value })}
-                    placeholder="س ص ع 1234"
-                    className={`w-full p-2.5 rounded-xl border focus:outline-none focus:ring-1 focus:ring-purple-500 font-mono ${inputBg}`}
+                    onChange={(val) => setVehicleForm({ ...vehicleForm, plate_number: val })}
                   />
                 </div>
                 <div>

@@ -68,10 +68,12 @@ export function initDatabase() {
     `);
   } catch (e) {}
 
-  // Seed screenshot demo parts if not existing
+  // Seed screenshot demo parts if workshop exists and not already seeded
   try {
-    const hasFZ = db.prepare('SELECT id FROM parts WHERE part_number = ?').get('FZ-001');
-    if (!hasFZ) {
+    const hasWs = db.prepare('SELECT id FROM workshops WHERE id = ?').get('ws_default_01');
+    if (hasWs) {
+      const hasFZ = db.prepare('SELECT id FROM parts WHERE part_number = ?').get('FZ-001');
+      if (!hasFZ) {
       const demoParts = [
         { id: 'part_img_01', pn: 'FZ-001', name: 'فلتر زيت', cat: 'فلاتر', brand: 'تويوتا', cost: 120, sale: 180, stock: 50, min: 10, loc: 'رف A-1', sup: 'تويوتا الوكالة', desc: 'فلتر زيت أصلي للمحرك' },
         { id: 'part_img_02', pn: 'FA-002', name: 'فلتر هواء', cat: 'فلاتر', brand: 'تويوتا', cost: 150, sale: 220, stock: 30, min: 10, loc: 'رف A-2', sup: 'تويوتا الوكالة', desc: 'فلتر هواء تنقية السحب' },
@@ -92,6 +94,7 @@ export function initDatabase() {
         stmt.run(p.id, p.pn, p.name, p.cat, p.brand, p.cost, p.sale, p.stock, p.min, p.loc, p.sup, p.desc);
       }
     }
+  }
   } catch (e) {
     console.error('Error seeding screenshot demo parts:', e);
   }
