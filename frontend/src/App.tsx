@@ -2,9 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { ThemeProvider, useTheme } from './context/ThemeContext';
 import { SyncProvider, useSync } from './context/SyncContext';
+import { DeviceProvider, useDevice } from './context/DeviceContext';
 import { Sidebar } from './components/layout/Sidebar';
 import { Topbar } from './components/layout/Topbar';
 import { MobileNav } from './components/layout/MobileNav';
+import { AndroidStatusBar } from './components/layout/AndroidStatusBar';
+import { MobileTopBar } from './components/layout/MobileTopBar';
+import { MobileBottomNav } from './components/layout/MobileBottomNav';
 
 // Views
 import { DashboardView } from './components/dashboard/DashboardView';
@@ -24,7 +28,7 @@ import { UsersView } from './components/users/UsersView';
 import { SettingsView } from './components/settings/SettingsView';
 import { MechanicWorkstation } from './components/mechanic/MechanicWorkstation';
 
-import { Wrench, Shield, Lock, User as UserIcon, ChevronLeft, Menu } from 'lucide-react';
+import { Wrench, Shield, Lock, User as UserIcon, ChevronLeft, Menu, Smartphone, Monitor } from 'lucide-react';
 
 const LoginView: React.FC = () => {
   const { login } = useAuth();
@@ -143,13 +147,13 @@ const LoginView: React.FC = () => {
 const MainApp: React.FC = () => {
   const { user, loading } = useAuth();
   const { theme } = useTheme();
+  const { deviceMode, setDeviceMode, isMobile, scale, setScale } = useDevice();
   const [activeTab, setActiveTab] = useState('dashboard');
   const [sidebarOpen, setSidebarOpen] = useState(() => {
     const saved = localStorage.getItem('sidebar_open');
     if (saved !== null) return saved === 'true';
     return window.innerWidth >= 1024;
   });
-  const [deviceMode, setDeviceMode] = useState<'desktop' | 'mobile'>('desktop');
   const [targetSearch, setTargetSearch] = useState<{ id?: string; search?: string } | null>(null);
 
   const handleGlobalNavigate = (tab: string, targetId?: string, searchParam?: string) => {
@@ -274,67 +278,189 @@ const MainApp: React.FC = () => {
     }
   };
 
-  return (
-    <div className={`min-h-screen flex transition-colors duration-300 ${
-      theme === 'dark' ? 'bg-[#070b14] text-slate-100' : 'bg-slate-100 text-slate-900'
-    } ${deviceMode === 'mobile' ? 'p-2 sm:p-6 justify-center' : ''}`}>
-      {/* Mobile Device Frame when Mobile simulation mode is toggled */}
-      <div className={`flex w-full ${deviceMode === 'mobile' ? `max-w-md h-[92vh] border-4 rounded-[38px] shadow-2xl overflow-hidden relative flex-col ${
-        theme === 'dark' ? 'border-white/10 bg-[#070b14]' : 'border-slate-300 bg-white'
-      }` : 'min-h-screen'}`}>
-        
-        {/* Slide Bar (Sidebar Drawer) */}
+  // 1. Android Simulation Frame (when user explicitly toggles Android)
+  if (deviceMode === 'mobile') {
+    return (
+      <div className={`min-h-screen flex flex-col items-center justify-center p-2 sm:p-6 transition-colors duration-300 relative select-none ${
+        theme === 'dark' ? 'bg-[#04070e] text-slate-100' : 'bg-slate-200 text-slate-900'
+      }`}>
+        {/* Floating Android Device Controls Bar */}
+        <div className="mb-3 flex items-center justify-between w-full max-w-[420px] px-3.5 py-2 rounded-2xl bg-[#0a0f1d]/90 border border-white/10 backdrop-blur-xl shadow-xl z-50">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-xs font-black text-white flex items-center gap-1.5">
+              <Smartphone className="w-3.5 h-3.5 text-sky-400" />
+              <span>هاتف أندرويد (نشط)</span>
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {/* Scale controls */}
+            <div className="flex items-center bg-white/[0.05] border border-white/[0.08] rounded-xl p-0.5 text-[11px] font-mono">
+              <button
+                type="button"
+                onClick={() => setScale(0.85)}
+                className={`px-1.5 py-0.5 rounded-lg transition-all ${scale === 0.85 ? 'bg-sky-500 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
+                title="عرض بنسبة 85%"
+              >
+                85%
+              </button>
+              <button
+                type="button"
+                onClick={() => setScale(0.92)}
+                className={`px-1.5 py-0.5 rounded-lg transition-all ${scale === 0.92 ? 'bg-sky-500 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
+                title="عرض بنسبة 92%"
+              >
+                92%
+              </button>
+              <button
+                type="button"
+                onClick={() => setScale(1)}
+                className={`px-1.5 py-0.5 rounded-lg transition-all ${scale === 1 ? 'bg-sky-500 text-white font-bold' : 'text-slate-400 hover:text-white'}`}
+                title="عرض كامل 100%"
+              >
+                100%
+              </button>
+            </div>
+
+            {/* Return to Windows Desktop */}
+            <button
+              type="button"
+              onClick={() => setDeviceMode('desktop')}
+              className="px-2.5 py-1 rounded-xl text-xs font-bold bg-white text-slate-950 hover:bg-slate-200 flex items-center gap-1.5 shadow-md transition-all active:scale-95"
+              title="العودة لشاشة ويندوز الكاملة"
+            >
+              <Monitor className="w-3.5 h-3.5" />
+              <span>ويندوز</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Flagship Android Smartphone Mockup Shell */}
+        <div
+          style={{ transform: scale !== 1 ? `scale(${scale})` : undefined, transformOrigin: 'top center' }}
+          className={`is-mobile-frame w-full max-w-[420px] h-[860px] max-h-[92vh] border-[10px] border-[#182030] rounded-[48px] relative overflow-hidden flex flex-col transition-all duration-300 ${
+            theme === 'dark' ? 'bg-[#070b14]' : 'bg-slate-50'
+          }`}
+        >
+          {/* Side Hardware Button Notches */}
+          <div className="absolute -left-[13px] top-28 w-[5px] h-12 bg-slate-700/60 rounded-l-md pointer-events-none" />
+          <div className="absolute -left-[13px] top-44 w-[5px] h-12 bg-slate-700/60 rounded-l-md pointer-events-none" />
+          <div className="absolute -right-[13px] top-32 w-[5px] h-16 bg-slate-700/60 rounded-r-md pointer-events-none" />
+
+          {/* Android Native Status Bar */}
+          <AndroidStatusBar />
+
+          {/* Android Native Top Bar */}
+          <MobileTopBar
+            activeTab={activeTab}
+            onOpenSidebar={() => setSidebarOpen(true)}
+            onNavigate={handleGlobalNavigate}
+          />
+
+          {/* Drawer Sidebar inside the phone frame */}
+          <Sidebar
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            isOpen={sidebarOpen}
+            setIsOpen={setSidebarOpen}
+          />
+
+          {/* Scrollable Viewport */}
+          <main className="flex-1 overflow-y-auto px-3.5 py-3 pb-24 scrollbar-thin">
+            {renderActiveView()}
+          </main>
+
+          {/* Android Luxury Bottom Navigation */}
+          <MobileBottomNav
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            onQuickIntake={() => setActiveTab('visits')}
+          />
+
+          {/* Android Home Gesture Indicator Pill */}
+          <div className="w-full h-3.5 flex items-center justify-center shrink-0 z-50 pointer-events-none pb-1">
+            <div className="w-28 h-1 bg-white/40 rounded-full" />
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. Real Mobile Screen (< 768px in browser or phone PWA)
+  if (typeof window !== 'undefined' && window.innerWidth < 768) {
+    return (
+      <div className={`min-h-screen flex flex-col relative ${theme === 'dark' ? 'bg-[#070b14] text-slate-100' : 'bg-slate-50 text-slate-900'}`}>
+        <MobileTopBar
+          activeTab={activeTab}
+          onOpenSidebar={() => setSidebarOpen(true)}
+          onNavigate={handleGlobalNavigate}
+        />
         <Sidebar
           activeTab={activeTab}
           setActiveTab={setActiveTab}
           isOpen={sidebarOpen}
           setIsOpen={setSidebarOpen}
         />
+        <main className="flex-1 overflow-y-auto px-3 py-3 pb-24">
+          {renderActiveView()}
+        </main>
+        <MobileBottomNav
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
+          onQuickIntake={() => setActiveTab('visits')}
+        />
+      </div>
+    );
+  }
 
-        {/* Floating Quick Tab to slide in the sidebar when closed on desktop */}
-        {!sidebarOpen && deviceMode === 'desktop' && (
-          <button
-            onClick={() => setSidebarOpen(true)}
-            className={`fixed top-24 right-0 z-40 flex items-center gap-1.5 py-2 px-2.5 rounded-l-xl shadow-lg transition-all duration-200 group border-y border-l ${
-              theme === 'dark'
-                ? 'bg-[#0a0f1d]/95 hover:bg-sky-500/20 text-sky-400 border-white/10 hover:border-sky-400/40 backdrop-blur-md'
-                : 'bg-white hover:bg-sky-50 text-sky-700 border-slate-200 hover:border-sky-200 shadow-slate-200'
-            }`}
-            title="إظهار القائمة المنزلقة (Slide bar)"
-          >
-            <ChevronLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
-            <span className="text-xs font-bold hidden sm:inline">القائمة</span>
-          </button>
-        )}
+  // 3. Desktop Windows Layout
+  return (
+    <div className={`min-h-screen flex transition-colors duration-300 ${
+      theme === 'dark' ? 'bg-[#070b14] text-slate-100' : 'bg-slate-100 text-slate-900'
+    }`}>
+      {/* Slide Bar (Sidebar Drawer) */}
+      <Sidebar
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        isOpen={sidebarOpen}
+        setIsOpen={setSidebarOpen}
+      />
 
-        {/* Content Wrapper */}
-        <div className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ease-in-out ${
-          deviceMode === 'desktop' && sidebarOpen ? 'md:mr-72' : 'mr-0'
-        }`}>
-          <Topbar
-            activeTab={activeTab}
-            sidebarOpen={sidebarOpen}
-            onToggleSidebar={() => setSidebarOpen(prev => !prev)}
-            onOpenSidebar={() => setSidebarOpen(true)}
-            deviceMode={deviceMode}
-            setDeviceMode={setDeviceMode}
-            onQuickAction={() => setActiveTab('visits')}
-            onNavigate={handleGlobalNavigate}
-          />
+      {/* Floating Quick Tab to slide in the sidebar when closed on desktop */}
+      {!sidebarOpen && (
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className={`fixed top-24 right-0 z-40 flex items-center gap-1.5 py-2 px-2.5 rounded-l-xl shadow-lg transition-all duration-200 group border-y border-l ${
+            theme === 'dark'
+              ? 'bg-[#0a0f1d]/95 hover:bg-sky-500/20 text-sky-400 border-white/10 hover:border-sky-400/40 backdrop-blur-md'
+              : 'bg-white hover:bg-sky-50 text-sky-700 border-slate-200 hover:border-sky-200 shadow-slate-200'
+          }`}
+          title="إظهار القائمة المنزلقة (Slide bar)"
+        >
+          <ChevronLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
+          <span className="text-xs font-bold hidden sm:inline">القائمة</span>
+        </button>
+      )}
 
-          <main className="flex-1 p-4 md:p-6 overflow-y-auto pb-24 md:pb-6">
-            {renderActiveView()}
-          </main>
+      {/* Content Wrapper */}
+      <div className={`flex-1 flex flex-col min-w-0 transition-all duration-300 ease-in-out ${
+        sidebarOpen ? 'md:mr-72' : 'mr-0'
+      }`}>
+        <Topbar
+          activeTab={activeTab}
+          sidebarOpen={sidebarOpen}
+          onToggleSidebar={() => setSidebarOpen(prev => !prev)}
+          onOpenSidebar={() => setSidebarOpen(true)}
+          deviceMode={deviceMode}
+          setDeviceMode={setDeviceMode}
+          onQuickAction={() => setActiveTab('visits')}
+          onNavigate={handleGlobalNavigate}
+        />
 
-          {/* Android Bottom Navigation */}
-          {(deviceMode === 'mobile' || window.innerWidth < 768) && (
-            <MobileNav
-              activeTab={activeTab}
-              setActiveTab={setActiveTab}
-              onQuickIntake={() => setActiveTab('visits')}
-            />
-          )}
-        </div>
+        <main className="flex-1 p-4 md:p-6 overflow-y-auto pb-10">
+          {renderActiveView()}
+        </main>
       </div>
     </div>
   );
@@ -345,9 +471,12 @@ export default function App() {
     <ThemeProvider>
       <AuthProvider>
         <SyncProvider>
-          <MainApp />
+          <DeviceProvider>
+            <MainApp />
+          </DeviceProvider>
         </SyncProvider>
       </AuthProvider>
     </ThemeProvider>
   );
 }
+

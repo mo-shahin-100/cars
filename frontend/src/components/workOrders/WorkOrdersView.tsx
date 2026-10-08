@@ -28,6 +28,8 @@ import {
 import { api } from '../../services/api';
 import { WorkOrder, Visit, User, Part } from '../../types';
 import { useSync } from '../../context/SyncContext';
+import { useDevice } from '../../context/DeviceContext';
+import { useTheme } from '../../context/ThemeContext';
 import { VehicleHandoverReportModal } from '../visits/VehicleHandoverReportModal';
 import { MaintenancePillsNav, MaintenanceCategory } from '../common/MaintenancePillsNav';
 
@@ -50,6 +52,9 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   initialSearch,
   initialOrderId
 }) => {
+  const { isMobile } = useDevice();
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
   const [activeCategory, setActiveCategory] = useState<'all' | 'maintenance' | 'repair' | 'overhaul' | 'diagnostics'>(categoryFilter);
   const [search, setSearch] = useState(initialSearch || '');
   const [orders, setOrders] = useState<WorkOrder[]>([]);
@@ -329,91 +334,183 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Top Action Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h3 className="font-bold text-base text-white">
-            {viewTitle || (
-              activeCategory === 'maintenance' ? 'الصيانة الدورية والسريعة' :
-              activeCategory === 'repair' ? 'أوامر التصليح والإصلاحات' :
-              activeCategory === 'overhaul' ? 'عمرة الماتور والمحركات' :
-              activeCategory === 'diagnostics' ? 'فحص وتشخيص الكمبيوتر والأعطال (DTC)' :
-              'أوامر العمل والمهام الفنية'
-            )}
-          </h3>
-          <p className="text-xs text-slate-400 mt-0.5">
-            {viewSubtitle || 'متابعة مراحل التنفيذ، تكلفة المصنعيات، وصرف قطع الغيار'}
-          </p>
-        </div>
+      <div className="flex items-center gap-2 flex-wrap">
+        {/* Mobile: compact title + category pills */}
+        {isMobile ? (
+          <>
+            <div className="flex items-center gap-2 w-full">
+              <div className="relative flex-1">
+                <Search className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="بحث..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  className={`w-full rounded-xl pr-9 pl-3 py-2.5 text-xs focus:outline-none focus:border-sky-500 ${
+                    isDark ? 'bg-slate-900 border border-slate-800 text-slate-100 placeholder-slate-500' : 'bg-slate-100 border border-slate-200 text-slate-900'
+                  }`}
+                />
+              </div>
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="flex items-center gap-1.5 bg-gradient-to-r from-sky-500 to-indigo-600 text-white px-3 py-2.5 rounded-xl text-xs font-bold shadow-lg active:scale-95 transition-all shrink-0"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>جديد</span>
+              </button>
+            </div>
+            <div className="w-full overflow-x-auto scrollbar-none">
+              <MaintenancePillsNav
+                activeCategory={activeCategory}
+                onSelectCategory={handleCategorySelect}
+                allCount={orders.length}
+              />
+            </div>
+          </>
+        ) : (
+          <>
+            <div>
+              <h3 className="font-bold text-base text-white">
+                {viewTitle || (
+                  activeCategory === 'maintenance' ? 'الصيانة الدورية والسريعة' :
+                  activeCategory === 'repair' ? 'أوامر التصليح والإصلاحات' :
+                  activeCategory === 'overhaul' ? 'عمرة الماتور والمحركات' :
+                  activeCategory === 'diagnostics' ? 'فحص وتشخيص الكمبيوتر والأعطال (DTC)' :
+                  'أوامر العمل والمهام الفنية'
+                )}
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {viewSubtitle || 'متابعة مراحل التنفيذ، تكلفة المصنعيات، وصرف قطع الغيار'}
+              </p>
+            </div>
 
-        {/* In-page search for Work Orders: Vehicle, Customer, Fault */}
-        <div className="relative flex-1 max-w-sm">
-          <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            placeholder="بحث بالسيارة، اللوحة، العميل، أو العطل..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-slate-900 border border-slate-800 rounded-xl pr-10 pl-4 py-2 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500"
-          />
-          {search && (
-            <button
-              onClick={() => setSearch('')}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
-            >
-              <X className="w-4 h-4" />
-            </button>
-          )}
-        </div>
+            <div className="relative flex-1 max-w-sm">
+              <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="بحث بالسيارة، اللوحة، العميل، أو العطل..."
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl pr-10 pl-4 py-2 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500"
+              />
+              {search && (
+                <button onClick={() => setSearch('')} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white">
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          {/* Quick filter pills */}
-          <MaintenancePillsNav
-            activeCategory={activeCategory}
-            onSelectCategory={handleCategorySelect}
-            allCount={orders.length}
-          />
-
-          <button
-            onClick={() => {
-              if (activeCategory === 'maintenance') {
-                setFormData(prev => ({ ...prev, description: 'صيانة دورية: تغيير زيوت وفلاتر وفحص عام' }));
-              } else if (activeCategory === 'repair') {
-                setFormData(prev => ({ ...prev, description: 'إصلاح عطل: ' }));
-              } else if (activeCategory === 'overhaul') {
-                setFormData(prev => ({ ...prev, description: 'عمرة وتوضيب محرك: ' }));
-              } else if (activeCategory === 'diagnostics') {
-                setFormData(prev => ({ ...prev, description: 'فحص كمبيوتر وتشخيص أعطال DTC: ' }));
-              }
-              setShowAddModal(true);
-            }}
-            className="flex items-center gap-2 bg-sky-600 hover:bg-sky-500 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-lg shadow-sky-600/20 active:scale-95 transition-all whitespace-nowrap"
-          >
-            <Plus className="w-4 h-4" />
-            <span>
-              {activeCategory === 'overhaul' ? 'أمر عمرة محرك جديد' :
-               activeCategory === 'maintenance' ? 'أمر صيانة جديد' :
-               activeCategory === 'repair' ? 'أمر تصليح جديد' :
-               activeCategory === 'diagnostics' ? 'أمر فحص كمبيوتر جديد' :
-               'إنشاء أمر عمل جديد'}
-            </span>
-          </button>
-        </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <MaintenancePillsNav
+                activeCategory={activeCategory}
+                onSelectCategory={handleCategorySelect}
+                allCount={orders.length}
+              />
+              <button
+                onClick={() => {
+                  if (activeCategory === 'maintenance') {
+                    setFormData(prev => ({ ...prev, description: 'صيانة دورية: تغيير زيوت وفلاتر وفحص عام' }));
+                  } else if (activeCategory === 'repair') {
+                    setFormData(prev => ({ ...prev, description: 'إصلاح عطل: ' }));
+                  } else if (activeCategory === 'overhaul') {
+                    setFormData(prev => ({ ...prev, description: 'عمرة وتوضيب محرك: ' }));
+                  } else if (activeCategory === 'diagnostics') {
+                    setFormData(prev => ({ ...prev, description: 'فحص كمبيوتر وتشخيص أعطال DTC: ' }));
+                  }
+                  setShowAddModal(true);
+                }}
+                className="flex items-center gap-2 bg-sky-600 hover:bg-sky-500 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-lg shadow-sky-600/20 active:scale-95 transition-all whitespace-nowrap"
+              >
+                <Plus className="w-4 h-4" />
+                <span>
+                  {activeCategory === 'overhaul' ? 'أمر عمرة محرك جديد' :
+                   activeCategory === 'maintenance' ? 'أمر صيانة جديد' :
+                   activeCategory === 'repair' ? 'أمر تصليح جديد' :
+                   activeCategory === 'diagnostics' ? 'أمر فحص كمبيوتر جديد' :
+                   'إنشاء أمر عمل جديد'}
+                </span>
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
-      {/* Work Orders Professional Table (جدول الصيانة المعتمد) */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
-        {loading ? (
-          <div className="p-12 text-center text-slate-400">جاري تحميل جدول أوامر الصيانة...</div>
-        ) : displayOrders.length === 0 ? (
-          <div className="p-12 text-center text-slate-400">
-            <ClipboardList className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-            <p className="font-semibold text-slate-300">
-              {search ? `لا توجد أوامر عمل تطابق بحثك: "${search}"` : 'لا توجد أوامر عمل مسجلة في هذا القسم حالياً'}
-            </p>
-          </div>
-        ) : (
+      {/* Work Orders List */}
+      {loading ? (
+        <div className="p-12 text-center text-slate-400">جاري تحميل جدول أوامر الصيانة...</div>
+      ) : displayOrders.length === 0 ? (
+        <div className={`p-10 rounded-2xl text-center ${ isDark ? 'bg-[#0a0f1d]/80 border border-white/[0.08]' : 'bg-white border border-slate-200' }`}>
+          <ClipboardList className="w-10 h-10 text-slate-600 mx-auto mb-3" />
+          <p className="font-bold text-slate-300 text-sm">
+            {search ? `لا توجد نتائج ل: "${search}"` : 'لا توجد أوامر عمل مسجلة'}
+          </p>
+        </div>
+      ) : isMobile ? (
+        /* === MOBILE CARD LIST === */
+        <div className="space-y-2.5">
+          {displayOrders.map((wo) => {
+            const priorityInfo: Record<string, { label: string; cls: string }> = {
+              low: { label: 'منخفضة', cls: 'text-slate-400 bg-slate-500/10 border-slate-500/30' },
+              normal: { label: 'عادي', cls: 'text-sky-400 bg-sky-500/10 border-sky-500/30' },
+              high: { label: 'عالية', cls: 'text-amber-400 bg-amber-500/10 border-amber-500/30' },
+              urgent: { label: '⚠ عاجل', cls: 'text-rose-400 bg-rose-500/10 border-rose-500/30 font-black' }
+            };
+            const prio = priorityInfo[wo.priority] || priorityInfo.normal;
+            const statusInfo: Record<string, { label: string; cls: string }> = {
+              new: { label: 'جديد', cls: 'bg-slate-500/15 text-slate-300 border-slate-500/30' },
+              diagnosing: { label: 'تشخيص', cls: 'bg-purple-500/15 text-purple-300 border-purple-500/30' },
+              in_progress: { label: 'جاري', cls: 'bg-amber-500/15 text-amber-300 border-amber-500/30' },
+              waiting_parts: { label: 'انتظار قطع', cls: 'bg-rose-500/15 text-rose-300 border-rose-500/30' },
+              completed: { label: 'مكتمل', cls: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' },
+              ready: { label: 'جاهز', cls: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30' },
+              delivered: { label: 'سلّم', cls: 'bg-sky-500/15 text-sky-300 border-sky-500/30' }
+            };
+            const st = statusInfo[wo.status] || { label: wo.status, cls: 'bg-slate-500/15 text-slate-300 border-slate-500/30' };
+            const isMaintenance = wo.category === 'maintenance' || wo.visit_status === 'maintenance' || (wo.description && wo.description.includes('صيانة'));
+            const isOverhaul = wo.category === 'overhaul' || wo.visit_status === 'engine_overhaul' || (wo.description && (wo.description.includes('عمرة') || wo.description.includes('ماتور')));
+            const catCls = isOverhaul ? 'bg-rose-500/10 text-rose-400 border-rose-500/30' : isMaintenance ? 'bg-sky-500/10 text-sky-400 border-sky-500/30' : 'bg-amber-500/10 text-amber-400 border-amber-500/30';
+            const catLabel = isOverhaul ? 'عمرة' : isMaintenance ? 'صيانة' : 'تصليح';
+            return (
+              <div
+                key={wo.id}
+                onClick={() => handleOpenDetail(wo.id)}
+                className={`rounded-2xl p-3.5 cursor-pointer active:scale-[0.98] transition-transform shadow-sm ${ isDark ? 'bg-[#0a0f1d]/80 border border-white/[0.08]' : 'bg-white border border-slate-200' }`}
+              >
+                {/* Top row */}
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-black text-sky-400 text-xs bg-sky-500/10 px-2 py-0.5 rounded-lg border border-sky-400/20">{wo.order_number}</span>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${catCls}`}>{catLabel}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${prio.cls}`}>{prio.label}</span>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${st.cls}`}>{st.label}</span>
+                  </div>
+                </div>
+
+                {/* Car + customer */}
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-emerald-500/20 to-sky-500/10 border border-emerald-400/20 flex items-center justify-center shrink-0">
+                    <Car className="w-4 h-4 text-emerald-400" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className={`text-xs font-black truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>{wo.make} {wo.model} <span className="font-mono text-sky-400">({wo.plate_number})</span></p>
+                    <p className="text-[11px] text-slate-400 truncate">{wo.customer_name || 'عميل نقدي'}</p>
+                  </div>
+                  <div className="font-mono font-bold text-emerald-400 text-sm shrink-0">{Number(wo.actual_cost || wo.estimated_cost || 0).toLocaleString()} <span className="text-[10px] text-slate-500">ج.م</span></div>
+                </div>
+
+                {/* Description snippet */}
+                <p className="text-[11px] text-slate-400 line-clamp-1">{wo.description}</p>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        /* === DESKTOP TABLE === */
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
           <div className="overflow-x-auto">
             <table className="w-full text-right text-xs sm:text-sm">
               <thead className="bg-slate-950/80 text-slate-400 border-b border-slate-800 text-xs">
@@ -563,8 +660,8 @@ export const WorkOrdersView: React.FC<WorkOrdersViewProps> = ({
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Create Order Modal */}
       {showAddModal && (

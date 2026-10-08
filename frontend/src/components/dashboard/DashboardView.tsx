@@ -41,6 +41,7 @@ import { DashboardStats, DashboardAlert, DashboardActivity } from '../../types';
 import { useSync } from '../../context/SyncContext';
 import { useTheme } from '../../context/ThemeContext';
 import { useAuth } from '../../context/AuthContext';
+import { useDevice } from '../../context/DeviceContext';
 import { WhatsAppReadyModal, WhatsAppData } from '../common/WhatsAppReadyModal';
 import { LicensePlateInput } from '../common/LicensePlateInput';
 
@@ -52,6 +53,7 @@ interface DashboardViewProps {
 export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onQuickAction }) => {
   const { user } = useAuth();
   const { theme } = useTheme();
+  const { isMobile } = useDevice();
   const { lastEvent } = useSync();
   const isDark = theme === 'dark';
 
@@ -607,79 +609,106 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onQuic
       )}
 
       {/* Top Welcome & Control Header */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-1 border-b border-white/[0.06]">
-        <div>
-          <div className="flex items-center gap-2">
-            <h1 className={`text-lg sm:text-xl font-black tracking-tight ${textHead}`}>
-              لوحة التحكم السريعة
-            </h1>
-            <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-sky-500/15 text-sky-400 border border-sky-400/30">
-              مركز العمليات
-            </span>
+      {isMobile ? (
+        <div className="flex items-center justify-between p-3.5 rounded-2xl bg-gradient-to-r from-sky-500/10 via-indigo-500/5 to-transparent border border-sky-500/20 shadow-sm">
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <h1 className="text-xs font-black text-white">
+                مرحباً، {user?.full_name?.split(' ')[0] || 'مهندس الورشة'} 👋
+              </h1>
+              <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 shrink-0">
+                الورشة نشطة ⚡
+              </span>
+            </div>
+            <p className="text-[10px] text-slate-400 mt-0.5 truncate">
+              لوحة العمليات المباشرة والمتابعة اللحظية
+            </p>
           </div>
-          <p className={`text-xs ${textMuted} mt-0.5`}>
-            مرحباً بك، <strong className={textHead}>{user?.full_name || 'مهندس الورشة'}</strong> • متابعة حية لجميع العمليات والسيارات بالورشة
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2 self-end sm:self-auto">
-          <button
-            type="button"
-            onClick={() => setActiveModal('shortcuts')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all border ${
-              isDark
-                ? 'bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 border-white/[0.08]'
-                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
-            }`}
-            title="عرض اختصارات لوحة المفاتيح"
-          >
-            <HelpCircle className="w-3.5 h-3.5 text-sky-400" />
-            <span className="hidden md:inline">اختصارات سريعة</span>
-            <span className="font-mono text-[10px] bg-slate-800 text-slate-400 px-1 py-0.2 rounded border border-slate-700">Alt</span>
-          </button>
-
           <button
             type="button"
             onClick={() => loadDashboardData(true)}
             disabled={refreshing}
-            className={`p-2 rounded-xl text-xs font-bold flex items-center gap-1 transition-all border ${
-              isDark
-                ? 'bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 border-white/[0.08]'
-                : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
-            }`}
+            className="p-2 rounded-xl bg-white/[0.05] hover:bg-white/[0.1] text-sky-400 border border-white/[0.08] shrink-0 active:scale-95 transition-transform"
             title="تحديث البيانات فورياً"
           >
-            <RefreshCw className={`w-3.5 h-3.5 text-sky-400 ${refreshing ? 'animate-spin' : ''}`} />
+            <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
           </button>
         </div>
-      </div>
+      ) : (
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-1 border-b border-white/[0.06]">
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className={`text-lg sm:text-xl font-black tracking-tight ${textHead}`}>
+                لوحة التحكم السريعة
+              </h1>
+              <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-sky-500/15 text-sky-400 border border-sky-400/30">
+                مركز العمليات
+              </span>
+            </div>
+            <p className={`text-xs ${textMuted} mt-0.5`}>
+              مرحباً بك، <strong className={textHead}>{user?.full_name || 'مهندس الورشة'}</strong> • متابعة حية لجميع العمليات والسيارات بالورشة
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 self-end sm:self-auto">
+            <button
+              type="button"
+              onClick={() => setActiveModal('shortcuts')}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all border ${
+                isDark
+                  ? 'bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 border-white/[0.08]'
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+              }`}
+              title="عرض اختصارات لوحة المفاتيح"
+            >
+              <HelpCircle className="w-3.5 h-3.5 text-sky-400" />
+              <span className="hidden md:inline">اختصارات سريعة</span>
+              <span className="font-mono text-[10px] bg-slate-800 text-slate-400 px-1 py-0.2 rounded border border-slate-700">Alt</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => loadDashboardData(true)}
+              disabled={refreshing}
+              className={`p-2 rounded-xl text-xs font-bold flex items-center gap-1 transition-all border ${
+                isDark
+                  ? 'bg-white/[0.04] hover:bg-white/[0.08] text-slate-300 border-white/[0.08]'
+                  : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200'
+              }`}
+              title="تحديث البيانات فورياً"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 text-sky-400 ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 2. TOP SUMMARY - 4 MAIN ACTIONABLE CARDS ONLY */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className={isMobile ? "grid grid-cols-2 gap-2.5" : "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"}>
         {/* Card 1: سيارات اليوم */}
         <div
           onClick={() => onNavigate('visits')}
-          className={`${cardBg} p-5 rounded-2xl cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:border-sky-500/50 group relative overflow-hidden`}
+          className={`${cardBg} ${isMobile ? 'p-3.5 rounded-2xl' : 'p-5 rounded-2xl'} cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:border-sky-500/50 group relative overflow-hidden`}
         >
           <div className="flex items-center justify-between">
             <span className={`text-xs font-bold ${textMuted}`}>سيارات اليوم</span>
-            <div className="w-10 h-10 rounded-xl bg-sky-500/15 border border-sky-400/30 text-sky-400 flex items-center justify-center transition-transform group-hover:scale-110">
-              <Calendar className="w-5 h-5" />
+            <div className={`${isMobile ? 'w-8 h-8 rounded-lg' : 'w-10 h-10 rounded-xl'} bg-sky-500/15 border border-sky-400/30 text-sky-400 flex items-center justify-center transition-transform group-hover:scale-110`}>
+              <Calendar className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'}`} />
             </div>
           </div>
-          <div className="mt-3 flex items-baseline justify-between">
-            <div className="flex items-baseline gap-1.5">
-              <span className={`text-3xl font-black tracking-tight ${textHead}`}>
+          <div className="mt-2.5 flex items-baseline justify-between">
+            <div className="flex items-baseline gap-1">
+              <span className={`${isMobile ? 'text-2xl' : 'text-3xl'} font-black tracking-tight ${textHead}`}>
                 {summary.today_vehicles}
               </span>
-              <span className={`text-xs font-bold ${textMuted}`}>سيارة</span>
+              <span className={`text-[11px] font-bold ${textMuted}`}>سيارة</span>
             </div>
-            <span className="text-[11px] font-bold text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded-full border border-sky-400/20">
-              استقبال اليوم
+            <span className="text-[10px] font-bold text-sky-400 bg-sky-500/10 px-1.5 py-0.2 rounded-full border border-sky-400/20">
+              استقبال
             </span>
           </div>
-          <p className={`text-[11px] ${textMuted} mt-2 flex items-center gap-1`}>
-            <span>اضغط لاستعراض سجل الزيارات اليومية</span>
+          <p className={`text-[10px] sm:text-[11px] ${textMuted} mt-1.5 flex items-center gap-1`}>
+            <span>سجل الزيارات</span>
             <ArrowUpRight className="w-3 h-3 text-sky-400" />
           </p>
         </div>
@@ -691,56 +720,54 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onQuic
             const el = document.getElementById('current-vehicles-section');
             if (el) el.scrollIntoView({ behavior: 'smooth' });
           }}
-          className={`${cardBg} p-5 rounded-2xl cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:border-amber-500/50 group relative overflow-hidden`}
+          className={`${cardBg} ${isMobile ? 'p-3.5 rounded-2xl' : 'p-5 rounded-2xl'} cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:border-amber-500/50 group relative overflow-hidden`}
         >
           <div className="flex items-center justify-between">
-            <span className={`text-xs font-bold ${textMuted}`}>السيارات داخل الورشة</span>
-            <div className="w-10 h-10 rounded-xl bg-amber-500/15 border border-amber-400/30 text-amber-400 flex items-center justify-center transition-transform group-hover:scale-110">
-              <Wrench className="w-5 h-5" />
+            <span className={`text-xs font-bold ${textMuted}`}>داخل الورشة</span>
+            <div className={`${isMobile ? 'w-8 h-8 rounded-lg' : 'w-10 h-10 rounded-xl'} bg-amber-500/15 border border-amber-400/30 text-amber-400 flex items-center justify-center transition-transform group-hover:scale-110`}>
+              <Wrench className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'}`} />
             </div>
           </div>
-          <div className="mt-3 flex items-baseline justify-between">
-            <div className="flex items-baseline gap-1.5">
-              <span className="text-3xl font-black tracking-tight text-amber-400">
+          <div className="mt-2.5 flex items-baseline justify-between">
+            <div className="flex items-baseline gap-1">
+              <span className={`${isMobile ? 'text-2xl' : 'text-3xl'} font-black tracking-tight text-amber-400`}>
                 {summary.total_in_workshop}
               </span>
-              <span className={`text-xs font-bold ${textMuted}`}>سيارة</span>
+              <span className={`text-[11px] font-bold ${textMuted}`}>سيارة</span>
             </div>
-            <span className="text-[11px] font-bold text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-400/20">
-              تحت العمل والفحص
+            <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-1.5 py-0.2 rounded-full border border-amber-400/20">
+              تحت العمل
             </span>
           </div>
-          <p className={`text-[11px] ${textMuted} mt-2 flex items-center gap-1`}>
-            <span>معروضة في جدول المتابعة بالأسفل 👇</span>
+          <p className={`text-[10px] sm:text-[11px] ${textMuted} mt-1.5 flex items-center gap-1`}>
+            <span>قيد الصيانة والفحص</span>
           </p>
         </div>
 
         {/* Card 3: تحصيل اليوم */}
         <div
           onClick={() => onNavigate('invoices')}
-          className={`${cardBg} p-5 rounded-2xl cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:border-emerald-500/50 group relative overflow-hidden`}
+          className={`${cardBg} ${isMobile ? 'p-3.5 rounded-2xl' : 'p-5 rounded-2xl'} cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:border-emerald-500/50 group relative overflow-hidden`}
         >
           <div className="flex items-center justify-between">
-            <span className={`text-xs font-bold ${textMuted}`}>تحصيل اليوم (سندات القبض)</span>
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/15 border border-emerald-400/30 text-emerald-400 flex items-center justify-center transition-transform group-hover:scale-110">
-              <Receipt className="w-5 h-5" />
+            <span className={`text-xs font-bold ${textMuted}`}>تحصيل اليوم</span>
+            <div className={`${isMobile ? 'w-8 h-8 rounded-lg' : 'w-10 h-10 rounded-xl'} bg-emerald-500/15 border border-emerald-400/30 text-emerald-400 flex items-center justify-center transition-transform group-hover:scale-110`}>
+              <Receipt className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'}`} />
             </div>
           </div>
-          <div className="mt-3 flex items-baseline justify-between">
-            <div className="flex items-baseline gap-1.5 font-mono">
-              <span className="text-2xl sm:text-3xl font-black tracking-tight text-emerald-400">
+          <div className="mt-2.5 flex items-baseline justify-between">
+            <div className="flex items-baseline gap-1 font-mono">
+              <span className={`${isMobile ? 'text-xl' : 'text-2xl sm:text-3xl'} font-black tracking-tight text-emerald-400 truncate`}>
                 {Number(summary.today_collections || 0).toLocaleString()}
               </span>
-              <span className="text-xs font-bold text-emerald-500">ج.م</span>
+              <span className="text-[10px] font-bold text-emerald-500">ج.م</span>
             </div>
-            {summary.today_invoiced > 0 && (
-              <span className="text-[10px] font-bold text-slate-300 bg-slate-800 px-2 py-0.5 rounded-full">
-                فواتير: {Number(summary.today_invoiced).toLocaleString()}
-              </span>
-            )}
+            <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 px-1.5 py-0.2 rounded-full border border-emerald-400/20">
+              سندات قبض
+            </span>
           </div>
-          <p className={`text-[11px] ${textMuted} mt-2 flex items-center gap-1`}>
-            <span>اضغط لفتح شاشة الفواتير وسندات القبض</span>
+          <p className={`text-[10px] sm:text-[11px] ${textMuted} mt-1.5 flex items-center gap-1`}>
+            <span>الفواتير والقبض</span>
             <ArrowUpRight className="w-3 h-3 text-emerald-400" />
           </p>
         </div>
@@ -751,129 +778,211 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onQuic
             const el = document.getElementById('needs-attention-section');
             if (el) el.scrollIntoView({ behavior: 'smooth' });
           }}
-          className={`${cardBg} p-5 rounded-2xl cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:border-rose-500/50 group relative overflow-hidden`}
+          className={`${cardBg} ${isMobile ? 'p-3.5 rounded-2xl' : 'p-5 rounded-2xl'} cursor-pointer transition-all duration-200 hover:-translate-y-1 hover:border-rose-500/50 group relative overflow-hidden`}
         >
           <div className="flex items-center justify-between">
-            <span className={`text-xs font-bold ${textMuted}`}>تحتاج انتباهك الآن</span>
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-transform group-hover:scale-110 border ${
+            <span className={`text-xs font-bold ${textMuted}`}>تنبيهات عاجلة</span>
+            <div className={`${isMobile ? 'w-8 h-8 rounded-lg' : 'w-10 h-10 rounded-xl'} flex items-center justify-center transition-transform group-hover:scale-110 border ${
               summary.attention_count > 0
                 ? 'bg-rose-500/15 border-rose-400/30 text-rose-400 animate-pulse'
                 : 'bg-emerald-500/15 border-emerald-400/30 text-emerald-400'
             }`}>
-              {summary.attention_count > 0 ? <AlertTriangle className="w-5 h-5" /> : <Check className="w-5 h-5" />}
+              {summary.attention_count > 0 ? (
+                <AlertTriangle className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'}`} />
+              ) : (
+                <Check className={`${isMobile ? 'w-4 h-4' : 'w-5 h-5'}`} />
+              )}
             </div>
           </div>
-          <div className="mt-3 flex items-baseline justify-between">
-            <div className="flex items-baseline gap-1.5">
-              <span className={`text-3xl font-black tracking-tight ${summary.attention_count > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
+          <div className="mt-2.5 flex items-baseline justify-between">
+            <div className="flex items-baseline gap-1">
+              <span className={`${isMobile ? 'text-2xl' : 'text-3xl'} font-black tracking-tight ${summary.attention_count > 0 ? 'text-rose-400' : 'text-emerald-400'}`}>
                 {summary.attention_count}
               </span>
-              <span className={`text-xs font-bold ${textMuted}`}>تنبيه عاجل</span>
+              <span className={`text-[11px] font-bold ${textMuted}`}>تنبيه</span>
             </div>
-            <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${
+            <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full border ${
               summary.attention_count > 0
                 ? 'bg-rose-500/10 text-rose-400 border-rose-400/20'
                 : 'bg-emerald-500/10 text-emerald-400 border-emerald-400/20'
             }`}>
-              {summary.attention_count > 0 ? 'تتطلب التدخل' : 'كل شيء ممتاز'}
+              {summary.attention_count > 0 ? 'يتطلب إجراء' : 'ممتاز ✓'}
             </span>
           </div>
-          <p className={`text-[11px] ${textMuted} mt-2 flex items-center gap-1`}>
-            <span>سيارات جاهزة، متأخرة، أو بانتظار قطع</span>
+          <p className={`text-[10px] sm:text-[11px] ${textMuted} mt-1.5 flex items-center gap-1`}>
+            <span>سيارات جاهزة أو معلقة</span>
           </p>
         </div>
       </div>
 
       {/* 3. QUICK ACTIONS - ACTION FIRST, LOW CLICKS */}
       <div>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className={`text-sm font-black flex items-center gap-2 ${textHead}`}>
+        <div className="flex items-center justify-between mb-2.5">
+          <h2 className={`text-xs sm:text-sm font-black flex items-center gap-1.5 ${textHead}`}>
             <Sparkles className="w-4 h-4 text-sky-400" />
             <span>إجراءات سريعة</span>
           </h2>
-          <span className="text-[11px] text-slate-400">
+          <span className="text-[10px] text-slate-400">
             تنفيذ أي عملية مباشرة بنقرة واحدة
           </span>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
-          {[
-            {
-              id: 'new_visit' as const,
-              label: 'تسجيل زيارة',
-              sub: 'دخول سيارة',
-              shortcut: 'Alt+N',
-              icon: PlusCircle,
-              color: 'border-sky-500/30 hover:border-sky-400 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400'
-            },
-            {
-              id: 'new_customer' as const,
-              label: 'إضافة عميل',
-              sub: 'بيانات العميل',
-              shortcut: 'Alt+C',
-              icon: User,
-              color: 'border-indigo-500/30 hover:border-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400'
-            },
-            {
-              id: 'new_vehicle' as const,
-              label: 'إضافة سيارة',
-              sub: 'لوحة وشاسيه',
-              shortcut: 'Alt+V',
-              icon: Car,
-              color: 'border-purple-500/30 hover:border-purple-400 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400'
-            },
-            {
-              id: 'new_work_order' as const,
-              label: 'فتح أمر صيانة',
-              sub: 'صيانة وفحص',
-              shortcut: 'Alt+W',
-              icon: Hammer,
-              color: 'border-amber-500/30 hover:border-amber-400 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400'
-            },
-            {
-              id: 'new_invoice' as const,
-              label: 'إصدار فاتورة',
-              sub: 'حساب التكلفة',
-              shortcut: 'Alt+I',
-              icon: Receipt,
-              color: 'border-emerald-500/30 hover:border-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400'
-            },
-            {
-              id: 'new_payment' as const,
-              label: 'تسجيل دفعة',
-              sub: 'سند قبض',
-              shortcut: 'Alt+P',
-              icon: DollarSign,
-              color: 'border-teal-500/30 hover:border-teal-400 bg-teal-500/10 hover:bg-teal-500/20 text-teal-400'
-            },
-            {
-              id: 'new_expense' as const,
-              label: 'إضافة مصروف',
-              sub: 'مصروفات عامة',
-              shortcut: 'Alt+E',
-              icon: Wallet,
-              color: 'border-rose-500/30 hover:border-rose-400 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400'
-            }
-          ].map(({ id, label, sub, shortcut, icon: Icon, color }) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => openModalWithData(id)}
-              className={`p-3.5 rounded-2xl border flex flex-col items-center justify-between text-center transition-all duration-200 hover:scale-[1.02] active:scale-95 group shadow-sm ${color}`}
-            >
-              <div className="w-full flex items-center justify-between mb-1">
-                <Icon className="w-5 h-5 shrink-0" />
-                <span className="text-[10px] font-mono opacity-60 bg-black/30 px-1 py-0.2 rounded">
-                  {shortcut}
+        {isMobile ? (
+          <div className="grid grid-cols-4 gap-2">
+            {[
+              {
+                id: 'new_visit' as const,
+                label: 'دخول سيارة',
+                icon: PlusCircle,
+                color: 'from-sky-500 to-blue-600',
+                border: 'border-sky-500/30 bg-sky-500/10'
+              },
+              {
+                id: 'new_work_order' as const,
+                label: 'أمر صيانة',
+                icon: Hammer,
+                color: 'from-amber-500 to-orange-600',
+                border: 'border-amber-500/30 bg-amber-500/10'
+              },
+              {
+                id: 'new_invoice' as const,
+                label: 'فاتورة',
+                icon: Receipt,
+                color: 'from-emerald-500 to-teal-600',
+                border: 'border-emerald-500/30 bg-emerald-500/10'
+              },
+              {
+                id: 'new_payment' as const,
+                label: 'سند قبض',
+                icon: DollarSign,
+                color: 'from-teal-500 to-emerald-600',
+                border: 'border-teal-500/30 bg-teal-500/10'
+              },
+              {
+                id: 'new_customer' as const,
+                label: 'إضافة عميل',
+                icon: User,
+                color: 'from-indigo-500 to-purple-600',
+                border: 'border-indigo-500/30 bg-indigo-500/10'
+              },
+              {
+                id: 'new_vehicle' as const,
+                label: 'إضافة سيارة',
+                icon: Car,
+                color: 'from-purple-500 to-pink-600',
+                border: 'border-purple-500/30 bg-purple-500/10'
+              },
+              {
+                id: 'new_expense' as const,
+                label: 'مصروف',
+                icon: Wallet,
+                color: 'from-rose-500 to-red-600',
+                border: 'border-rose-500/30 bg-rose-500/10'
+              },
+              {
+                id: 'diagnostics' as const,
+                label: 'فحص كمبيوتر',
+                icon: Cpu,
+                color: 'from-cyan-500 to-blue-600',
+                border: 'border-cyan-500/30 bg-cyan-500/10',
+                isNav: true
+              }
+            ].map(({ id, label, icon: Icon, color, border, isNav }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => isNav ? onNavigate('diagnostics') : openModalWithData(id as any)}
+                className={`p-2.5 rounded-2xl border ${border} flex flex-col items-center justify-center gap-1.5 transition-all duration-200 active:scale-95 group shadow-sm`}
+              >
+                <div className={`w-10 h-10 rounded-xl bg-gradient-to-tr ${color} text-white flex items-center justify-center shadow-md shadow-black/20 group-hover:scale-105 transition-transform`}>
+                  <Icon className="w-5 h-5" />
+                </div>
+                <span className="text-[10px] font-bold text-white truncate w-full text-center">
+                  {label}
                 </span>
-              </div>
-              <div className="w-full text-right mt-1">
-                <span className="text-xs font-black block text-white truncate">{label}</span>
-                <span className="text-[10px] opacity-75 block truncate">{sub}</span>
-              </div>
-            </button>
-          ))}
-        </div>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
+            {[
+              {
+                id: 'new_visit' as const,
+                label: 'تسجيل زيارة',
+                sub: 'دخول سيارة',
+                shortcut: 'Alt+N',
+                icon: PlusCircle,
+                color: 'border-sky-500/30 hover:border-sky-400 bg-sky-500/10 hover:bg-sky-500/20 text-sky-400'
+              },
+              {
+                id: 'new_customer' as const,
+                label: 'إضافة عميل',
+                sub: 'بيانات العميل',
+                shortcut: 'Alt+C',
+                icon: User,
+                color: 'border-indigo-500/30 hover:border-indigo-400 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400'
+              },
+              {
+                id: 'new_vehicle' as const,
+                label: 'إضافة سيارة',
+                sub: 'لوحة وشاسيه',
+                shortcut: 'Alt+V',
+                icon: Car,
+                color: 'border-purple-500/30 hover:border-purple-400 bg-purple-500/10 hover:bg-purple-500/20 text-purple-400'
+              },
+              {
+                id: 'new_work_order' as const,
+                label: 'فتح أمر صيانة',
+                sub: 'صيانة وفحص',
+                shortcut: 'Alt+W',
+                icon: Hammer,
+                color: 'border-amber-500/30 hover:border-amber-400 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400'
+              },
+              {
+                id: 'new_invoice' as const,
+                label: 'إصدار فاتورة',
+                sub: 'حساب التكلفة',
+                shortcut: 'Alt+I',
+                icon: Receipt,
+                color: 'border-emerald-500/30 hover:border-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400'
+              },
+              {
+                id: 'new_payment' as const,
+                label: 'تسجيل دفعة',
+                sub: 'سند قبض',
+                shortcut: 'Alt+P',
+                icon: DollarSign,
+                color: 'border-teal-500/30 hover:border-teal-400 bg-teal-500/10 hover:bg-teal-500/20 text-teal-400'
+              },
+              {
+                id: 'new_expense' as const,
+                label: 'إضافة مصروف',
+                sub: 'مصروفات عامة',
+                shortcut: 'Alt+E',
+                icon: Wallet,
+                color: 'border-rose-500/30 hover:border-rose-400 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400'
+              }
+            ].map(({ id, label, sub, shortcut, icon: Icon, color }) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => openModalWithData(id)}
+                className={`p-3.5 rounded-2xl border flex flex-col items-center justify-between text-center transition-all duration-200 hover:scale-[1.02] active:scale-95 group shadow-sm ${color}`}
+              >
+                <div className="w-full flex items-center justify-between mb-1">
+                  <Icon className="w-5 h-5 shrink-0" />
+                  <span className="text-[10px] font-mono opacity-60 bg-black/30 px-1 py-0.2 rounded">
+                    {shortcut}
+                  </span>
+                </div>
+                <div className="w-full text-right mt-1">
+                  <span className="text-xs font-black block text-white truncate">{label}</span>
+                  <span className="text-[10px] opacity-75 block truncate">{sub}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* 4. NEEDS ATTENTION - ACTIONABLE ALERTS */}
@@ -983,7 +1092,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onQuic
           )}
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
+        <div className={isMobile ? "flex items-center gap-2 overflow-x-auto pb-2 scrollbar-none snap-x" : "grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5"}>
           {[
             { id: 'received', label: 'استقبال', count: pipeline.received, icon: Car, color: 'sky' },
             { id: 'inspection', label: 'فحص مبدئي', count: pipeline.inspection, icon: FileText, color: 'indigo' },
@@ -999,7 +1108,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onQuic
               <div
                 key={id}
                 onClick={() => setSelectedPipelineStage(isSelected ? null : id)}
-                className={`p-3 rounded-2xl border flex flex-col justify-between cursor-pointer transition-all duration-200 hover:-translate-y-0.5 ${
+                className={`${isMobile ? 'min-w-[105px] shrink-0 snap-start p-2.5' : 'p-3'} rounded-2xl border flex flex-col justify-between cursor-pointer transition-all duration-200 hover:-translate-y-0.5 active:scale-95 ${
                   isSelected
                     ? 'ring-2 ring-sky-400 bg-sky-500/15 border-sky-400 shadow-lg shadow-sky-500/10'
                     : isDark
@@ -1082,199 +1191,341 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onNavigate, onQuic
           </div>
         </div>
 
-        {/* Table Content */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-right text-xs">
-            <thead className={isDark ? 'bg-white/[0.03] text-slate-400 border-b border-white/[0.08]' : 'bg-slate-50 text-slate-600 border-b border-slate-200'}>
-              <tr>
-                <th className="py-3 px-4 font-bold">رقم الزيارة</th>
-                <th className="py-3 px-4 font-bold">السيارة واللوحة</th>
-                <th className="py-3 px-4 font-bold">العميل</th>
-                <th className="py-3 px-4 font-bold">الخدمة والشكوى</th>
-                <th className="py-3 px-4 font-bold">الحالة</th>
-                <th className="py-3 px-4 font-bold">الفني</th>
-                <th className="py-3 px-4 font-bold">المدة</th>
-                <th className="py-3 px-4 font-bold">التكلفة</th>
-                <th className="py-3 px-4 font-bold text-center">الإجراءات</th>
-              </tr>
-            </thead>
-            <tbody className={isDark ? 'divide-y divide-white/[0.06]' : 'divide-y divide-slate-100'}>
-              {filteredVehicles.length > 0 ? (
-                filteredVehicles.map((v: any) => {
-                  const badge = getArabicStatusBadge(v.status);
-
-                  return (
-                    <tr key={v.id} className={`${isDark ? 'hover:bg-white/[0.03]' : 'hover:bg-slate-50'} transition-colors`}>
-                      {/* 1. Visit # */}
-                      <td className="py-3 px-4 font-mono font-black text-slate-300">
-                        {v.visit_number}
-                      </td>
-
-                      {/* 2. Car & Plate */}
-                      <td className="py-3 px-4">
-                        <div className="flex flex-col">
-                          <span className={`font-bold ${textHead}`}>
+        {/* Table / Mobile Cards Content */}
+        {isMobile ? (
+          <div className="p-3 space-y-2.5">
+            {filteredVehicles.length > 0 ? (
+              filteredVehicles.map((v: any) => {
+                const badge = getArabicStatusBadge(v.status);
+                return (
+                  <div
+                    key={v.id}
+                    className={`p-3.5 rounded-2xl border transition-all ${
+                      isDark ? 'bg-white/[0.03] border-white/[0.08]' : 'bg-white border-slate-200'
+                    } shadow-sm space-y-2.5`}
+                  >
+                    {/* Header: Car Make/Model + Plate Number */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-8 h-8 rounded-xl bg-sky-500/15 text-sky-400 flex items-center justify-center shrink-0">
+                          <Car className="w-4 h-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <h4 className="text-xs font-black text-white truncate">
                             {v.make} {v.model} {v.year ? `(${v.year})` : ''}
-                          </span>
-                          <span className="text-[11px] font-mono text-sky-400 font-bold bg-slate-900/80 px-1.5 py-0.5 rounded w-fit border border-slate-800 mt-0.5">
-                            {v.plate_number}
-                          </span>
+                          </h4>
+                          <span className="text-[10px] text-slate-400 font-mono">زيارة #{v.visit_number}</span>
                         </div>
-                      </td>
+                      </div>
+                      <span className="text-xs font-mono font-black text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded-lg border border-sky-400/25 shrink-0">
+                        {v.plate_number}
+                      </span>
+                    </div>
 
-                      {/* 3. Customer */}
-                      <td className="py-3 px-4">
-                        <div className="flex flex-col">
-                          <span className="font-bold text-slate-200">{v.customer_name}</span>
-                          {v.customer_phone && (
-                            <a
-                              href={`tel:${v.customer_phone}`}
-                              className="text-[11px] text-slate-400 hover:text-sky-400 font-mono mt-0.5 flex items-center gap-1 w-fit"
-                              dir="ltr"
-                            >
-                              <Phone className="w-2.5 h-2.5" />
-                              <span>{v.customer_phone}</span>
-                            </a>
-                          )}
-                        </div>
-                      </td>
+                    {/* Status & Customer */}
+                    <div className="flex items-center justify-between pt-1 border-t border-white/[0.06] text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setStatusChangeVisit(v)}
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold ${badge.color} active:scale-95`}
+                      >
+                        <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`} />
+                        <span>{badge.label}</span>
+                      </button>
 
-                      {/* 4. Complaint / Service */}
-                      <td className={`py-3 px-4 max-w-xs ${textMuted}`}>
-                        <p className="truncate font-semibold text-slate-200">{v.customer_complaint || 'صيانة عامة'}</p>
-                        {v.work_order_desc && v.work_order_desc !== v.customer_complaint && (
-                          <p className="text-[11px] text-amber-400/90 truncate">{v.work_order_desc}</p>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[11px] text-slate-300 font-semibold truncate max-w-[120px]">{v.customer_name}</span>
+                        {v.customer_phone && (
+                          <a
+                            href={`tel:${v.customer_phone}`}
+                            className="p-1.5 rounded-lg bg-sky-500/10 text-sky-400 hover:bg-sky-500 hover:text-white transition-all"
+                            title="اتصال بالعميل"
+                          >
+                            <Phone className="w-3 h-3" />
+                          </a>
                         )}
-                      </td>
-
-                      {/* 5. Status Badge with Quick Status Changer */}
-                      <td className="py-3 px-4">
                         <button
                           type="button"
-                          onClick={() => setStatusChangeVisit(v)}
-                          className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all hover:scale-105 cursor-pointer ${badge.color}`}
-                          title="اضغط لتغيير حالة السيارة سريعاً"
+                          onClick={() => handleOpenWhatsApp(v.id)}
+                          className="p-1.5 rounded-lg bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500 hover:text-white transition-all"
+                          title="إشعار واتساب"
                         >
-                          <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`}></span>
-                          <span>{badge.label}</span>
+                          <MessageCircle className="w-3 h-3" />
                         </button>
-                      </td>
+                      </div>
+                    </div>
 
-                      {/* 6. Technician */}
-                      <td className="py-3 px-4 text-slate-300">
-                        {v.mechanic_name ? (
-                          <span className="font-medium text-slate-300">{v.mechanic_name}</span>
+                    {/* Complaint */}
+                    {v.customer_complaint && (
+                      <div className="text-[11px] text-slate-300 bg-black/20 p-2 rounded-xl">
+                        <span className="text-amber-400 font-bold">الشكوى: </span>
+                        <span>{v.customer_complaint}</span>
+                      </div>
+                    )}
+
+                    {/* Footer: Technician & Cost & Quick Buttons */}
+                    <div className="flex items-center justify-between pt-2 border-t border-white/[0.06] text-xs">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-mono font-bold text-emerald-400">
+                          {Number(v.total_cost || 0).toLocaleString()} ج.م
+                        </span>
+                        <span className="text-[10px] text-slate-400">
+                          • {v.mechanic_name || 'لم يُعيّن فني'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => setSelectedCarForDetails(v)}
+                          className="px-2.5 py-1 rounded-lg bg-purple-950/60 text-purple-300 hover:text-white text-[11px] font-bold border border-purple-800/60 transition-all active:scale-95 flex items-center gap-1"
+                        >
+                          <Wrench className="w-3 h-3" />
+                          <span>تفاصيل</span>
+                        </button>
+
+                        {v.invoice_number ? (
+                          <button
+                            type="button"
+                            onClick={() => onNavigate('invoices', v.invoice_id, v.invoice_number)}
+                            className="px-2.5 py-1 rounded-lg bg-teal-950/60 text-teal-300 hover:text-white text-[11px] font-bold border border-teal-800/60 transition-all active:scale-95 flex items-center gap-1"
+                          >
+                            <Receipt className="w-3 h-3" />
+                            <span>فاتورة</span>
+                          </button>
                         ) : (
-                          <span className="text-[11px] text-slate-500 italic">لم يُعيّن بعد</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setInvoiceForm(prev => ({
+                                ...prev,
+                                visit_id: v.id,
+                                customer_id: v.customer_id,
+                                vehicle_id: v.vehicle_id,
+                                grand_total: String(v.total_cost || '')
+                              }));
+                              setActiveModal('new_invoice');
+                            }}
+                            className="px-2.5 py-1 rounded-lg bg-sky-950/60 text-sky-300 hover:text-white text-[11px] font-bold border border-sky-800/60 transition-all active:scale-95 flex items-center gap-1"
+                          >
+                            <Receipt className="w-3 h-3" />
+                            <span>فاتورة</span>
+                          </button>
                         )}
-                      </td>
-
-                      {/* 7. Duration */}
-                      <td className="py-3 px-4 text-slate-400 text-[11px] whitespace-nowrap">
-                        {formatDurationSince(v.entry_datetime)}
-                      </td>
-
-                      {/* 8. Cost */}
-                      <td className="py-3 px-4">
-                        <div className="flex flex-col font-mono font-bold">
-                          <span className="text-emerald-400 text-sm">
-                            {Number(v.total_cost || 0).toLocaleString()} ج.م
-                          </span>
-                          {v.invoice_number ? (
-                            <span className="text-[10px] text-slate-400 font-normal">
-                              فاتورة: {v.invoice_number}
-                            </span>
-                          ) : (
-                            <span className="text-[10px] text-amber-400/80 font-normal">
-                              تكلفة مقدرة
-                            </span>
-                          )}
-                        </div>
-                      </td>
-
-                      {/* 9. Actions */}
-                      <td className="py-3 px-4 text-center">
-                        <div className="flex items-center justify-center gap-1.5">
-                          {/* Details Icon: What was fixed & replaced */}
-                          <button
-                            type="button"
-                            onClick={() => setSelectedCarForDetails(v)}
-                            className="p-1.5 rounded-lg bg-purple-950/60 hover:bg-purple-900 text-purple-300 hover:text-white border border-purple-800/60 transition-all cursor-pointer"
-                            title="عرض كشف ما تم تغييره وإصلاحه في السيارة"
-                          >
-                            <Wrench className="w-3.5 h-3.5" />
-                          </button>
-
-                          {/* Invoice Button */}
-                          {v.invoice_number ? (
-                            <button
-                              type="button"
-                              onClick={() => onNavigate('invoices', v.invoice_id, v.invoice_number)}
-                              className="p-1.5 rounded-lg bg-teal-950/60 hover:bg-teal-900 text-teal-300 hover:text-white border border-teal-800/60 transition-all cursor-pointer"
-                              title="استعراض الفاتورة وطباعتها"
-                            >
-                              <Receipt className="w-3.5 h-3.5" />
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setInvoiceForm(prev => ({
-                                  ...prev,
-                                  visit_id: v.id,
-                                  customer_id: v.customer_id,
-                                  vehicle_id: v.vehicle_id,
-                                  grand_total: String(v.total_cost || '')
-                                }));
-                                setActiveModal('new_invoice');
-                              }}
-                              className="p-1.5 rounded-lg bg-sky-950/60 hover:bg-sky-900 text-sky-300 hover:text-white border border-sky-800/60 transition-all cursor-pointer"
-                              title="إصدار فاتورة للسيارة"
-                            >
-                              <Receipt className="w-3.5 h-3.5" />
-                            </button>
-                          )}
-
-                          {/* WhatsApp Ready Notification */}
-                          <button
-                            type="button"
-                            onClick={() => handleOpenWhatsApp(v.id)}
-                            className="p-1.5 rounded-lg bg-emerald-950/60 hover:bg-emerald-900 text-emerald-300 hover:text-white border border-emerald-800/60 transition-all cursor-pointer"
-                            title="إرسال إشعار جاهزية السيارة عبر واتساب"
-                          >
-                            <MessageCircle className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              ) : (
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            ) : (
+              <div className="py-8 text-center text-slate-400">
+                <Car className="w-8 h-8 mx-auto mb-2 text-slate-600 opacity-60" />
+                <p className="font-bold text-xs text-slate-300">لا توجد سيارات مطابقة حالياً</p>
+                <button
+                  type="button"
+                  onClick={() => openModalWithData('new_visit')}
+                  className="mt-3 px-3 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold inline-flex items-center gap-1 shadow-md"
+                >
+                  <PlusCircle className="w-3.5 h-3.5" />
+                  <span>تسجيل دخول سيارة</span>
+                </button>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-right text-xs">
+              <thead className={isDark ? 'bg-white/[0.03] text-slate-400 border-b border-white/[0.08]' : 'bg-slate-50 text-slate-600 border-b border-slate-200'}>
                 <tr>
-                  <td colSpan={9} className="py-12 text-center text-slate-400">
-                    <Car className="w-8 h-8 mx-auto mb-2 text-slate-600 opacity-60" />
-                    <p className="font-bold text-sm text-slate-300">
-                      {selectedPipelineStage
-                        ? `لا توجد سيارات حالياً في مرحلة (${selectedPipelineStage})`
-                        : 'لا توجد سيارات داخل الورشة حالياً'}
-                    </p>
-                    <p className="text-xs text-slate-500 mt-1">
-                      يمكنك تسجيل دخول سيارة جديدة بنقرة واحدة عبر زر "تسجيل زيارة"
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => openModalWithData('new_visit')}
-                      className="mt-3 px-4 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-md cursor-pointer"
-                    >
-                      <PlusCircle className="w-3.5 h-3.5" />
-                      <span>تسجيل زيارة جديدة (Alt+N)</span>
-                    </button>
-                  </td>
+                  <th className="py-3 px-4 font-bold">رقم الزيارة</th>
+                  <th className="py-3 px-4 font-bold">السيارة واللوحة</th>
+                  <th className="py-3 px-4 font-bold">العميل</th>
+                  <th className="py-3 px-4 font-bold">الخدمة والشكوى</th>
+                  <th className="py-3 px-4 font-bold">الحالة</th>
+                  <th className="py-3 px-4 font-bold">الفني</th>
+                  <th className="py-3 px-4 font-bold">المدة</th>
+                  <th className="py-3 px-4 font-bold">التكلفة</th>
+                  <th className="py-3 px-4 font-bold text-center">الإجراءات</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className={isDark ? 'divide-y divide-white/[0.06]' : 'divide-y divide-slate-100'}>
+                {filteredVehicles.length > 0 ? (
+                  filteredVehicles.map((v: any) => {
+                    const badge = getArabicStatusBadge(v.status);
+
+                    return (
+                      <tr key={v.id} className={`${isDark ? 'hover:bg-white/[0.03]' : 'hover:bg-slate-50'} transition-colors`}>
+                        {/* 1. Visit # */}
+                        <td className="py-3 px-4 font-mono font-black text-slate-300">
+                          {v.visit_number}
+                        </td>
+
+                        {/* 2. Car & Plate */}
+                        <td className="py-3 px-4">
+                          <div className="flex flex-col">
+                            <span className={`font-bold ${textHead}`}>
+                              {v.make} {v.model} {v.year ? `(${v.year})` : ''}
+                            </span>
+                            <span className="text-[11px] font-mono text-sky-400 font-bold bg-slate-900/80 px-1.5 py-0.5 rounded w-fit border border-slate-800 mt-0.5">
+                              {v.plate_number}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* 3. Customer */}
+                        <td className="py-3 px-4">
+                          <div className="flex flex-col">
+                            <span className="font-bold text-slate-200">{v.customer_name}</span>
+                            {v.customer_phone && (
+                              <a
+                                href={`tel:${v.customer_phone}`}
+                                className="text-[11px] text-slate-400 hover:text-sky-400 font-mono mt-0.5 flex items-center gap-1 w-fit"
+                                dir="ltr"
+                              >
+                                <Phone className="w-2.5 h-2.5" />
+                                <span>{v.customer_phone}</span>
+                              </a>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* 4. Complaint / Service */}
+                        <td className={`py-3 px-4 max-w-xs ${textMuted}`}>
+                          <p className="truncate font-semibold text-slate-200">{v.customer_complaint || 'صيانة عامة'}</p>
+                          {v.work_order_desc && v.work_order_desc !== v.customer_complaint && (
+                            <p className="text-[11px] text-amber-400/90 truncate">{v.work_order_desc}</p>
+                          )}
+                        </td>
+
+                        {/* 5. Status Badge with Quick Status Changer */}
+                        <td className="py-3 px-4">
+                          <button
+                            type="button"
+                            onClick={() => setStatusChangeVisit(v)}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold flex items-center gap-1.5 transition-all hover:scale-105 cursor-pointer ${badge.color}`}
+                            title="اضغط لتغيير حالة السيارة سريعاً"
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${badge.dot}`}></span>
+                            <span>{badge.label}</span>
+                          </button>
+                        </td>
+
+                        {/* 6. Technician */}
+                        <td className="py-3 px-4 text-slate-300">
+                          {v.mechanic_name ? (
+                            <span className="font-medium text-slate-300">{v.mechanic_name}</span>
+                          ) : (
+                            <span className="text-[11px] text-slate-500 italic">لم يُعيّن بعد</span>
+                          )}
+                        </td>
+
+                        {/* 7. Duration */}
+                        <td className="py-3 px-4 text-slate-400 text-[11px] whitespace-nowrap">
+                          {formatDurationSince(v.entry_datetime)}
+                        </td>
+
+                        {/* 8. Cost */}
+                        <td className="py-3 px-4">
+                          <div className="flex flex-col font-mono font-bold">
+                            <span className="text-emerald-400 text-sm">
+                              {Number(v.total_cost || 0).toLocaleString()} ج.م
+                            </span>
+                            {v.invoice_number ? (
+                              <span className="text-[10px] text-slate-400 font-normal">
+                                فاتورة: {v.invoice_number}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-amber-400/80 font-normal">
+                                تكلفة مقدرة
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
+                        {/* 9. Actions */}
+                        <td className="py-3 px-4 text-center">
+                          <div className="flex items-center justify-center gap-1.5">
+                            {/* Details Icon: What was fixed & replaced */}
+                            <button
+                              type="button"
+                              onClick={() => setSelectedCarForDetails(v)}
+                              className="p-1.5 rounded-lg bg-purple-950/60 hover:bg-purple-900 text-purple-300 hover:text-white border border-purple-800/60 transition-all cursor-pointer"
+                              title="عرض كشف ما تم تغييره وإصلاحه في السيارة"
+                            >
+                              <Wrench className="w-3.5 h-3.5" />
+                            </button>
+
+                            {/* Invoice Button */}
+                            {v.invoice_number ? (
+                              <button
+                                type="button"
+                                onClick={() => onNavigate('invoices', v.invoice_id, v.invoice_number)}
+                                className="p-1.5 rounded-lg bg-teal-950/60 hover:bg-teal-900 text-teal-300 hover:text-white border border-teal-800/60 transition-all cursor-pointer"
+                                title="استعراض الفاتورة وطباعتها"
+                              >
+                                <Receipt className="w-3.5 h-3.5" />
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setInvoiceForm(prev => ({
+                                    ...prev,
+                                    visit_id: v.id,
+                                    customer_id: v.customer_id,
+                                    vehicle_id: v.vehicle_id,
+                                    grand_total: String(v.total_cost || '')
+                                  }));
+                                  setActiveModal('new_invoice');
+                                }}
+                                className="p-1.5 rounded-lg bg-sky-950/60 hover:bg-sky-900 text-sky-300 hover:text-white border border-sky-800/60 transition-all cursor-pointer"
+                                title="إصدار فاتورة للسيارة"
+                              >
+                                <Receipt className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+
+                            {/* WhatsApp Ready Notification */}
+                            <button
+                              type="button"
+                              onClick={() => handleOpenWhatsApp(v.id)}
+                              className="p-1.5 rounded-lg bg-emerald-950/60 hover:bg-emerald-900 text-emerald-300 hover:text-white border border-emerald-800/60 transition-all cursor-pointer"
+                              title="إرسال إشعار جاهزية السيارة عبر واتساب"
+                            >
+                              <MessageCircle className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan={9} className="py-12 text-center text-slate-400">
+                      <Car className="w-8 h-8 mx-auto mb-2 text-slate-600 opacity-60" />
+                      <p className="font-bold text-sm text-slate-300">
+                        {selectedPipelineStage
+                          ? `لا توجد سيارات حالياً في مرحلة (${selectedPipelineStage})`
+                          : 'لا توجد سيارات داخل الورشة حالياً'}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        يمكنك تسجيل دخول سيارة جديدة بنقرة واحدة عبر زر "تسجيل زيارة"
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => openModalWithData('new_visit')}
+                        className="mt-3 px-4 py-1.5 rounded-xl bg-sky-600 hover:bg-sky-500 text-white text-xs font-bold inline-flex items-center gap-1.5 shadow-md cursor-pointer"
+                      >
+                        <PlusCircle className="w-3.5 h-3.5" />
+                        <span>تسجيل زيارة جديدة (Alt+N)</span>
+                      </button>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       {/* 7 & 8: FINANCIAL SNAPSHOT & RECENT ACTIVITY (GRID) */}

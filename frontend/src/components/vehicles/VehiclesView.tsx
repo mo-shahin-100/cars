@@ -23,6 +23,8 @@ import {
 import { api } from '../../services/api';
 import { Vehicle, Customer } from '../../types';
 import { useSync } from '../../context/SyncContext';
+import { useDevice } from '../../context/DeviceContext';
+import { useTheme } from '../../context/ThemeContext';
 import { LicensePlateInput } from '../common/LicensePlateInput';
 import { CarBrandModelSelector } from './CarBrandModelSelector';
 import { WhatsAppReadyModal, WhatsAppData } from '../common/WhatsAppReadyModal';
@@ -33,6 +35,9 @@ interface VehiclesViewProps {
 }
 
 export const VehiclesView: React.FC<VehiclesViewProps> = ({ initialSearch, initialVehicleId }) => {
+  const { isMobile } = useDevice();
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [search, setSearch] = useState(initialSearch || '');
@@ -257,41 +262,128 @@ export const VehiclesView: React.FC<VehiclesViewProps> = ({ initialSearch, initi
     }
   };
 
+  const cardBg = isDark ? 'bg-[#0a0f1d]/80 border border-white/[0.08]' : 'bg-white border border-slate-200';
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Search & Actions */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="بحث برقم اللوحة، الهيكل VIN، الماركة، أو المالك..."
+            placeholder="بحث باللوحة أو المالك..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-slate-900 border border-slate-800 rounded-xl pr-10 pl-4 py-2.5 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500"
+            className={`w-full rounded-xl pr-9 pl-3 py-2.5 text-xs focus:outline-none focus:border-sky-500 transition-colors ${
+              isDark ? 'bg-slate-900 border border-slate-800 text-slate-100 placeholder-slate-500' : 'bg-slate-100 border border-slate-200 text-slate-900 placeholder-slate-400'
+            }`}
           />
         </div>
-
         <button
           onClick={() => setShowAddModal(true)}
-          className="flex items-center justify-center gap-2 bg-sky-600 hover:bg-sky-500 text-white px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold shadow-lg shadow-sky-600/20 active:scale-95 transition-all"
+          className="flex items-center gap-1.5 bg-gradient-to-r from-sky-500 to-indigo-600 text-white px-3 py-2.5 rounded-xl text-xs font-bold shadow-lg shadow-sky-600/20 active:scale-95 transition-all shrink-0"
         >
-          <Plus className="w-4 h-4" />
-          <span>تسجيل سيارة جديدة</span>
+          <Plus className="w-3.5 h-3.5" />
+          <span>{isMobile ? 'جديد' : 'تسجيل سيارة جديدة'}</span>
         </button>
       </div>
 
-      {/* Vehicles Table */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
-        {loading ? (
-          <div className="p-8 text-center text-slate-400 text-sm">جاري جلب قائمة السيارات...</div>
-        ) : vehicles.length === 0 ? (
-          <div className="p-12 text-center text-slate-400">
-            <Car className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-            <p className="font-semibold text-slate-300">لم يتم العثور على أي سيارات</p>
-            <p className="text-xs text-slate-500 mt-1">سجل سيارة جديدة لربطها بالعميل وبدء تاريخ الصيانة</p>
-          </div>
-        ) : (
+      {/* Vehicles List */}
+      {loading ? (
+        <div className="p-8 text-center text-slate-400 text-sm">جاري جلب قائمة السيارات...</div>
+      ) : vehicles.length === 0 ? (
+        <div className={`${cardBg} p-10 rounded-2xl text-center`}>
+          <Car className="w-10 h-10 text-slate-600 mx-auto mb-3" />
+          <p className="font-bold text-slate-300 text-sm">لا توجد سيارات مسجلة</p>
+          <p className="text-xs text-slate-500 mt-1">سجل سيارة جديدة لبدء متابعة صيانتها</p>
+        </div>
+      ) : isMobile ? (
+        /* === MOBILE CARD LIST === */
+        <div className="space-y-2.5">
+          {vehicles.map((v) => {
+            const diffKm = v.next_maintenance_km ? v.next_maintenance_km - (v.current_odometer || 0) : null;
+            const maintenanceStatus = diffKm === null ? null : diffKm < 0 ? 'overdue' : diffKm <= 1000 ? 'soon' : 'ok';
+            return (
+              <div key={v.id} className={`${cardBg} rounded-2xl p-3.5 shadow-sm`}>
+                {/* Top row: plate + status */}
+                <div className="flex items-center justify-between mb-2.5">
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono font-black text-sky-400 text-sm bg-sky-500/10 px-2.5 py-1 rounded-xl border border-sky-400/20">{v.plate_number}</span>
+                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                      maintenanceStatus === 'overdue' ? 'bg-rose-500/15 text-rose-400 border border-rose-500/30' :
+                      maintenanceStatus === 'soon' ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30 animate-pulse' :
+                      maintenanceStatus === 'ok' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' :
+                      'bg-slate-500/10 text-slate-400 border border-slate-500/20'
+                    }`}>
+                      {maintenanceStatus === 'overdue' ? '⚠ متأخرة' : maintenanceStatus === 'soon' ? '⏰ قريباً' : maintenanceStatus === 'ok' ? `✓ ${diffKm?.toLocaleString()}كم` : 'لم تحدد'}
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-slate-500 font-mono">{v.visits_count || 0} زيارة</span>
+                </div>
+
+                {/* Car info */}
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-sky-500/20 to-indigo-500/10 border border-sky-400/20 flex items-center justify-center shrink-0">
+                    <Car className="w-4.5 h-4.5 text-sky-400" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className={`text-xs font-black truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>{v.make} {v.model} <span className="text-slate-400 font-normal">({v.year})</span></p>
+                    <p className="text-[11px] text-slate-400 truncate">{v.owner_name} • <span className="font-mono">{(v.current_odometer || 0).toLocaleString()} كم</span></p>
+                  </div>
+                </div>
+
+                {/* Next maintenance notes if any */}
+                {v.next_maintenance_notes && (
+                  <div className="flex items-start gap-1.5 mb-2.5 p-2 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                    <Wrench className="w-3 h-3 text-amber-400 shrink-0 mt-0.5" />
+                    <span className="text-[11px] text-amber-300 font-medium line-clamp-2">{v.next_maintenance_notes}</span>
+                  </div>
+                )}
+
+                {/* Action buttons row */}
+                <div className="flex items-center gap-1.5 pt-2.5 border-t border-white/[0.06]">
+                  <button
+                    onClick={() => handleSendWhatsAppMaintenance(v.id)}
+                    className="flex-1 flex items-center justify-center gap-1 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white py-2 rounded-xl text-[11px] font-bold transition-all border border-emerald-500/20 active:scale-95"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5" />
+                    <span>واتساب</span>
+                  </button>
+                  <button
+                    onClick={() => handleOpenScheduleModal(v)}
+                    className="flex-1 flex items-center justify-center gap-1 bg-amber-500/10 hover:bg-amber-500 text-amber-400 hover:text-slate-950 py-2 rounded-xl text-[11px] font-bold transition-all border border-amber-500/20 active:scale-95"
+                  >
+                    <Wrench className="w-3.5 h-3.5" />
+                    <span>الصيانة</span>
+                  </button>
+                  <button
+                    onClick={() => handleOpenTimeline(v)}
+                    className="flex-1 flex items-center justify-center gap-1 bg-sky-500/10 hover:bg-sky-500 text-sky-400 hover:text-white py-2 rounded-xl text-[11px] font-bold transition-all border border-sky-500/20 active:scale-95"
+                  >
+                    <History className="w-3.5 h-3.5" />
+                    <span>السجل</span>
+                  </button>
+                  <button
+                    onClick={() => { setSelectedVehicle(v); setShowTransferModal(true); }}
+                    className="p-2 bg-slate-800/60 hover:bg-slate-700 text-slate-300 rounded-xl transition-colors border border-white/[0.06] active:scale-95"
+                  >
+                    <UserCheck className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    onClick={() => handleDeleteVehicle(v.id, v.plate_number)}
+                    className="p-2 bg-slate-800/60 hover:bg-rose-500/20 hover:text-rose-400 text-slate-400 rounded-xl transition-colors border border-white/[0.06] active:scale-95"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        /* === DESKTOP TABLE === */
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-right text-xs sm:text-sm">
               <thead className="bg-slate-950/70 text-slate-400 border-b border-slate-800 text-xs">
@@ -443,8 +535,8 @@ export const VehiclesView: React.FC<VehiclesViewProps> = ({ initialSearch, initi
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Register Vehicle Modal */}
       {showAddModal && (

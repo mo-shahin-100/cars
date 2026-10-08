@@ -28,6 +28,7 @@ import {
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useTheme } from '../../context/ThemeContext';
+import { useDevice } from '../../context/DeviceContext';
 
 export interface SidebarProps {
   activeTab: string;
@@ -39,6 +40,7 @@ export interface SidebarProps {
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpen, setIsOpen }) => {
   const { user, logout } = useAuth();
   const { theme } = useTheme();
+  const { isMobile, deviceMode } = useDevice();
   const isDark = theme === 'dark';
 
   const isMaintenanceTab = ['maintenance', 'repairs', 'engine_overhaul', 'diagnostics', 'work-orders'].includes(activeTab);
@@ -113,14 +115,18 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpe
       {/* Backdrop for Slide Bar: when open on mobile or tablet */}
       {isOpen && (
         <div
-          className="fixed inset-0 bg-black/60 z-40 lg:hidden backdrop-blur-sm transition-opacity duration-300"
+          className={`${
+            deviceMode === 'mobile' ? 'absolute inset-0' : 'fixed inset-0 lg:hidden'
+          } bg-black/60 z-40 backdrop-blur-sm transition-opacity duration-300`}
           onClick={() => setIsOpen(false)}
         />
       )}
 
       {/* Slide Bar Drawer */}
       <aside
-        className={`fixed top-0 right-0 z-50 h-screen w-72 backdrop-blur-2xl shadow-2xl flex flex-col transition-transform duration-300 ease-in-out ${sidebarBg} ${
+        className={`${
+          deviceMode === 'mobile' ? 'absolute h-full w-[280px]' : 'fixed h-screen w-72'
+        } top-0 right-0 z-50 backdrop-blur-2xl shadow-2xl flex flex-col transition-transform duration-300 ease-in-out ${sidebarBg} ${
           isOpen ? 'translate-x-0' : 'translate-x-full'
         }`}
       >
@@ -176,7 +182,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpe
                   key={item.id}
                   onClick={() => {
                     setActiveTab(item.id);
-                    if (window.innerWidth < 1024) {
+                    if (window.innerWidth < 1024 || isMobile) {
                       setIsOpen(false);
                     }
                   }}
@@ -232,7 +238,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpe
                       key={sub.id}
                       onClick={() => {
                         setActiveTab(sub.id);
-                        if (window.innerWidth < 1024) {
+                        if (window.innerWidth < 1024 || isMobile) {
                           setIsOpen(false);
                         }
                       }}
@@ -314,7 +320,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpe
                       key={sub.id}
                       onClick={() => {
                         setActiveTab(sub.id);
-                        if (window.innerWidth < 1024) {
+                        if (window.innerWidth < 1024 || isMobile) {
                           setIsOpen(false);
                         }
                       }}
@@ -358,7 +364,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isOpe
                   key={item.id}
                   onClick={() => {
                     setActiveTab(item.id);
-                    if (window.innerWidth < 1024) {
+                    if (window.innerWidth < 1024 || isMobile) {
                       setIsOpen(false);
                     }
                   }}

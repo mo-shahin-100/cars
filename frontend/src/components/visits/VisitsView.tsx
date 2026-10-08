@@ -23,6 +23,8 @@ import {
 import { api } from '../../services/api';
 import { Visit, Vehicle, Customer } from '../../types';
 import { useSync } from '../../context/SyncContext';
+import { useDevice } from '../../context/DeviceContext';
+import { useTheme } from '../../context/ThemeContext';
 import { WhatsAppReadyModal, WhatsAppData } from '../common/WhatsAppReadyModal';
 import { VehicleHandoverReportModal } from './VehicleHandoverReportModal';
 import { LicensePlateInput } from '../common/LicensePlateInput';
@@ -34,6 +36,9 @@ interface VisitsViewProps {
 }
 
 export const VisitsView: React.FC<VisitsViewProps> = ({ initialSearch, initialVisitId }) => {
+  const { isMobile } = useDevice();
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
   const [visits, setVisits] = useState<Visit[]>([]);
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
@@ -291,124 +296,148 @@ export const VisitsView: React.FC<VisitsViewProps> = ({ initialSearch, initialVi
   });
 
   return (
-    <div className="space-y-6">
-      {/* Search & Actions Bar */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-        {/* In-page Search Bar */}
-        <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
+    <div className="space-y-4">
+      {/* Search & Filters Bar */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="بحث باسم العميل، رقم الهاتف، اللوحة، نوع السيارة، أو العطل والشكوى..."
+            placeholder="بحث بالعميل أو اللوحة..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-slate-900 border border-slate-800 rounded-xl pr-10 pl-4 py-2.5 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500"
+            className={`w-full rounded-xl pr-9 pl-3 py-2.5 text-xs focus:outline-none focus:border-sky-500 ${
+              isDark ? 'bg-slate-900 border border-slate-800 text-slate-100 placeholder-slate-500' : 'bg-slate-100 border border-slate-200 text-slate-900'
+            }`}
           />
           {search && (
-            <button
-              onClick={() => setSearch('')}
-              className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
-            >
-              <X className="w-4 h-4" />
+            <button onClick={() => setSearch('')} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white">
+              <X className="w-3.5 h-3.5" />
             </button>
           )}
         </div>
-
-        {/* Filters and Actions */}
-        <div className="flex items-center gap-2 overflow-x-auto text-xs pb-1 sm:pb-0">
-          <button
-            onClick={() => setStatusFilter('')}
-            className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-colors ${
-              statusFilter === '' ? 'bg-sky-600 text-white' : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
-            }`}
-          >
-            جميع الزيارات
-          </button>
-          <button
-            onClick={() => setStatusFilter('received')}
-            className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-colors ${
-              statusFilter === 'received' ? 'bg-slate-700 text-white' : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
-            }`}
-          >
-            استلام جديد
-          </button>
-          <button
-            onClick={() => setStatusFilter('maintenance')}
-            className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-colors flex items-center gap-1 ${
-              statusFilter === 'maintenance' ? 'bg-sky-600 text-white' : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
-            }`}
-          >
-            <Wrench className="w-3.5 h-3.5 text-sky-400" />
-            <span>صيانة دورية</span>
-          </button>
-          <button
-            onClick={() => setStatusFilter('repairs')}
-            className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-colors flex items-center gap-1 ${
-              statusFilter === 'repairs' ? 'bg-amber-600 text-white' : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
-            }`}
-          >
-            <Hammer className="w-3.5 h-3.5 text-amber-400" />
-            <span>تصليح أعطال</span>
-          </button>
-          <button
-            onClick={() => setStatusFilter('engine_overhaul')}
-            className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-colors flex items-center gap-1 ${
-              statusFilter === 'engine_overhaul' ? 'bg-rose-600 text-white' : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
-            }`}
-          >
-            <Gauge className="w-3.5 h-3.5 text-rose-400" />
-            <span>عمرة ماتور</span>
-          </button>
-          <button
-            onClick={() => setStatusFilter('diagnostics')}
-            className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-colors flex items-center gap-1 ${
-              statusFilter === 'diagnostics' ? 'bg-purple-600 text-white' : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
-            }`}
-          >
-            <Cpu className="w-3.5 h-3.5 text-purple-400" />
-            <span>فحص كمبيوتر</span>
-          </button>
-          <button
-            onClick={() => setStatusFilter('ready')}
-            className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-colors flex items-center gap-1 ${
-              statusFilter === 'ready' ? 'bg-emerald-600 text-white' : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
-            }`}
-          >
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-            <span>جاهزة للاستلام</span>
-          </button>
-          <button
-            onClick={() => setStatusFilter('delivered')}
-            className={`px-3 py-1.5 rounded-xl font-bold whitespace-nowrap transition-colors flex items-center gap-1 ${
-              statusFilter === 'delivered' ? 'bg-teal-600 text-white' : 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white'
-            }`}
-          >
-            <Check className="w-3.5 h-3.5 text-teal-400" />
-            <span>تم الاستلام</span>
-          </button>
-
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="flex items-center justify-center gap-2 bg-sky-600 hover:bg-sky-500 text-white px-4 py-2 rounded-xl text-xs sm:text-sm font-bold shadow-lg shadow-sky-600/20 active:scale-95 transition-all whitespace-nowrap"
-          >
-            <Plus className="w-4 h-4" />
-            <span>تسجيل زيارة</span>
-          </button>
-        </div>
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="flex items-center gap-1.5 bg-gradient-to-r from-sky-500 to-indigo-600 text-white px-3 py-2.5 rounded-xl text-xs font-bold shadow-lg active:scale-95 transition-all shrink-0"
+        >
+          <Plus className="w-3.5 h-3.5" />
+          <span>{isMobile ? 'دخول' : 'تسجيل زيارة'}</span>
+        </button>
       </div>
 
-      {/* Visits Table */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
-        {loading ? (
-          <div className="p-8 text-center text-slate-400 text-sm">جاري جلب الزيارات...</div>
-        ) : filteredVisits.length === 0 ? (
-          <div className="p-12 text-center text-slate-400">
-            <Calendar className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-            <p className="font-semibold text-slate-300">
-              {search ? `لا توجد نتائج تطابق بحثك: "${search}"` : 'لا توجد زيارات مسجلة في هذا القسم'}
-            </p>
-          </div>
-        ) : (
+      {/* Status filter pills */}
+      <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-1">
+        {[
+          { id: '', label: 'الكل', icon: null },
+          { id: 'received', label: 'استلام', icon: Car },
+          { id: 'maintenance', label: 'صيانة', icon: Wrench },
+          { id: 'repairs', label: 'تصليح', icon: Hammer },
+          { id: 'engine_overhaul', label: 'عمرة', icon: Gauge },
+          { id: 'diagnostics', label: 'فحص', icon: Cpu },
+          { id: 'ready', label: 'جاهزة', icon: CheckCircle2 },
+          { id: 'delivered', label: 'سلّم', icon: Check },
+        ].map((f) => {
+          const Icon = f.icon;
+          const isActive = statusFilter === f.id;
+          return (
+            <button
+              key={f.id}
+              onClick={() => setStatusFilter(f.id)}
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-[11px] font-bold whitespace-nowrap transition-all shrink-0 ${
+                isActive
+                  ? 'bg-sky-500 text-white shadow-sm'
+                  : isDark ? 'bg-slate-900 border border-slate-800 text-slate-400 hover:text-white' : 'bg-slate-100 border border-slate-200 text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              {Icon && <Icon className="w-3 h-3" />}
+              <span>{f.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Visits List */}
+      {loading ? (
+        <div className="p-8 text-center text-slate-400 text-sm">جاري جلب الزيارات...</div>
+      ) : filteredVisits.length === 0 ? (
+        <div className={`p-10 rounded-2xl text-center ${ isDark ? 'bg-[#0a0f1d]/80 border border-white/[0.08]' : 'bg-white border border-slate-200' }`}>
+          <Calendar className="w-10 h-10 text-slate-600 mx-auto mb-3" />
+          <p className="font-bold text-slate-300 text-sm">
+            {search ? `لا توجد نتائج ل: "${search}"` : 'لا توجد زيارات مسجلة'}
+          </p>
+        </div>
+      ) : isMobile ? (
+        /* === MOBILE CARD LIST === */
+        <div className="space-y-2.5">
+          {filteredVisits.map((v) => {
+            const b = statusBadges[v.status] || { label: v.status, color: 'bg-slate-500/15 text-slate-300' };
+            return (
+              <div
+                key={v.id}
+                className={`rounded-2xl p-3.5 shadow-sm ${ isDark ? 'bg-[#0a0f1d]/80 border border-white/[0.08]' : 'bg-white border border-slate-200' }`}
+              >
+                {/* Top row: visit # + status */}
+                <div className="flex items-center justify-between mb-2">
+                  <span className="font-mono font-black text-sky-400 text-xs bg-sky-500/10 px-2 py-0.5 rounded-lg border border-sky-400/20">{v.visit_number}</span>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${b.color}`}>{b.label}</span>
+                </div>
+
+                {/* Car info */}
+                <div className="flex items-center gap-2 mb-1.5">
+                  <div className="w-8 h-8 rounded-xl bg-sky-500/10 border border-sky-400/20 flex items-center justify-center shrink-0">
+                    <Car className="w-4 h-4 text-sky-400" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className={`text-xs font-black truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                      {v.make} {v.model} <span className="font-mono text-sky-400">({v.plate_number})</span>
+                    </p>
+                    <p className="text-[11px] text-slate-400 truncate">{v.customer_name} • <span className="font-mono">{(v.odometer_in || 0).toLocaleString()} كم</span></p>
+                  </div>
+                </div>
+
+                {/* Complaint */}
+                {v.customer_complaint && (
+                  <p className="text-[11px] text-slate-400 line-clamp-1 mb-2.5">شكوى: {v.customer_complaint}</p>
+                )}
+
+                {/* Actions */}
+                <div className="flex items-center gap-1.5 pt-2 border-t border-white/[0.06]">
+                  <button
+                    onClick={() => setReportVisitId(v.id)}
+                    className="flex-1 flex items-center justify-center gap-1 bg-white/10 hover:bg-white hover:text-slate-950 text-white py-2 rounded-xl text-[11px] font-bold transition-all border border-white/10 active:scale-95"
+                  >
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>تقرير</span>
+                  </button>
+                  {v.status === 'ready' && (
+                    <button
+                      onClick={() => handleOpenWhatsApp(v.id)}
+                      className="flex-1 flex items-center justify-center gap-1 bg-emerald-500/10 hover:bg-emerald-500 text-emerald-400 hover:text-white py-2 rounded-xl text-[11px] font-bold transition-all border border-emerald-500/20 active:scale-95"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5" />
+                      <span>واتساب</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => handleOpenDetail(v.id)}
+                    className="flex-1 flex items-center justify-center gap-1 bg-sky-500/10 hover:bg-sky-500 text-sky-400 hover:text-white py-2 rounded-xl text-[11px] font-bold transition-all border border-sky-500/20 active:scale-95"
+                  >
+                    <span>تفاصيل</span>
+                  </button>
+                  <button
+                    onClick={() => handleDeleteVisit(v.id, v.visit_number)}
+                    className="p-2 bg-slate-800/60 hover:bg-rose-500/20 hover:text-rose-400 text-slate-400 rounded-xl transition-colors border border-white/[0.06] active:scale-95"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        /* === DESKTOP TABLE === */
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-right text-xs sm:text-sm">
               <thead className="bg-slate-950/70 text-slate-400 border-b border-slate-800 text-xs">
@@ -432,7 +461,7 @@ export const VisitsView: React.FC<VisitsViewProps> = ({ initialSearch, initialVi
                         {v.make} {v.model} ({v.plate_number})
                       </td>
                       <td className="py-3 px-4 text-slate-300">{v.customer_name}</td>
-                      <td className="py-3 px-4 font-mono text-slate-300">{v.odometer_in.toLocaleString()} كم</td>
+                      <td className="py-3 px-4 font-mono text-slate-300">{(v.odometer_in || 0).toLocaleString()} كم</td>
                       <td className="py-3 px-4 text-slate-400 max-w-xs truncate">{v.customer_complaint}</td>
                       <td className="py-3 px-4">
                         <span className={`px-2.5 py-1 rounded-full text-[11px] font-bold ${b.color}`}>
@@ -444,7 +473,6 @@ export const VisitsView: React.FC<VisitsViewProps> = ({ initialSearch, initialVi
                           <button
                             onClick={() => setReportVisitId(v.id)}
                             className="px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-950 rounded-lg text-xs font-black shadow-sm flex items-center gap-1 transition-all border border-white cursor-pointer active:scale-95"
-                            title="عرض وطباعة تقرير الاستلام والصيانة"
                           >
                             <FileText className="w-3.5 h-3.5 stroke-[2.5]" />
                             <span>التقرير</span>
@@ -453,10 +481,9 @@ export const VisitsView: React.FC<VisitsViewProps> = ({ initialSearch, initialVi
                             <button
                               onClick={() => handleOpenWhatsApp(v.id)}
                               className="px-2 py-1 bg-emerald-500/15 hover:bg-emerald-500 text-emerald-400 hover:text-white rounded-lg text-xs font-bold border border-emerald-500/25 flex items-center gap-1 transition-all shadow-sm"
-                              title="إرسال رسالة جاهزية السيارة للعميل عبر واتساب"
                             >
-                              <MessageCircle className="w-3.5 h-3.5 text-emerald-400 group-hover:text-white" />
-                              <span className="hidden xl:inline">واتساب</span>
+                              <MessageCircle className="w-3.5 h-3.5" />
+                              <span>واتساب</span>
                             </button>
                           )}
                           <button
@@ -468,7 +495,6 @@ export const VisitsView: React.FC<VisitsViewProps> = ({ initialSearch, initialVi
                           <button
                             onClick={() => handleDeleteVisit(v.id, v.visit_number)}
                             className="p-1 bg-slate-800 hover:bg-rose-600/20 hover:text-rose-400 text-slate-400 rounded-lg transition-colors"
-                            title="حذف الزيارة"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -480,8 +506,8 @@ export const VisitsView: React.FC<VisitsViewProps> = ({ initialSearch, initialVi
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Add Visit Intake Modal */}
       {showAddModal && (

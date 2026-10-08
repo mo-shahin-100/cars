@@ -3,6 +3,8 @@ import { Search, Plus, User, Phone, MapPin, Car, Receipt, Calendar, X, Eye, Tras
 import { api } from '../../services/api';
 import { Customer } from '../../types';
 import { useSync } from '../../context/SyncContext';
+import { useDevice } from '../../context/DeviceContext';
+import { useTheme } from '../../context/ThemeContext';
 import { LicensePlateInput } from '../common/LicensePlateInput';
 import { CarBrandModelSelector } from '../vehicles/CarBrandModelSelector';
 
@@ -24,6 +26,9 @@ const initialVehicleState = {
 };
 
 export const CustomersView: React.FC<CustomersViewProps> = ({ initialSearch, initialCustomerId }) => {
+  const { isMobile } = useDevice();
+  const { theme } = useTheme();
+  const isDark = theme === 'dark';
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [search, setSearch] = useState(initialSearch || '');
   const [loading, setLoading] = useState(true);
@@ -240,41 +245,110 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ initialSearch, ini
     }
   };
 
+  const cardBg = isDark ? 'bg-[#0a0f1d]/80 border border-white/[0.08]' : 'bg-white border border-slate-200';
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Search & Actions Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-        <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 text-slate-400 absolute right-3.5 top-1/2 -translate-y-1/2" />
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1">
+          <Search className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2" />
           <input
             type="text"
-            placeholder="بحث بالاسم أو رقم الهاتف أو كود العميل..."
+            placeholder="بحث بالاسم أو الهاتف..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full bg-slate-900 border border-slate-800 rounded-xl pr-10 pl-4 py-2.5 text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-sky-500"
+            className={`w-full rounded-xl pr-9 pl-3 py-2.5 text-xs focus:outline-none focus:border-sky-500 ${
+              isDark ? 'bg-slate-900 border border-slate-800 text-slate-100 placeholder-slate-500' : 'bg-slate-100 border border-slate-200 text-slate-900'
+            }`}
           />
         </div>
-
         <button
           onClick={() => setShowAddModal(true)}
-          className="flex items-center justify-center gap-2 bg-sky-600 hover:bg-sky-500 text-white px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold shadow-lg shadow-sky-600/20 active:scale-95 transition-all"
+          className="flex items-center gap-1.5 bg-gradient-to-r from-sky-500 to-indigo-600 text-white px-3 py-2.5 rounded-xl text-xs font-bold shadow-lg active:scale-95 transition-all shrink-0"
         >
-          <Plus className="w-4 h-4" />
-          <span>إضافة عميل جديد</span>
+          <Plus className="w-3.5 h-3.5" />
+          <span>{isMobile ? 'جديد' : 'إضافة عميل جديد'}</span>
         </button>
       </div>
 
-      {/* Customers Table / Cards */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
-        {loading ? (
-          <div className="p-8 text-center text-slate-400 text-sm">جاري جلب قائمة العملاء...</div>
-        ) : customers.length === 0 ? (
-          <div className="p-12 text-center text-slate-400">
-            <User className="w-10 h-10 text-slate-600 mx-auto mb-3" />
-            <p className="font-semibold text-slate-300">لم يتم العثور على أي عملاء</p>
-            <p className="text-xs text-slate-500 mt-1">أضف عميلاً جديداً للبدء</p>
-          </div>
-        ) : (
+      {/* Customers List */}
+      {loading ? (
+        <div className="p-8 text-center text-slate-400 text-sm">جاري جلب قائمة العملاء...</div>
+      ) : customers.length === 0 ? (
+        <div className={`${cardBg} p-10 rounded-2xl text-center`}>
+          <User className="w-10 h-10 text-slate-600 mx-auto mb-3" />
+          <p className="font-bold text-slate-300 text-sm">لا يوجد عملاء مسجلون</p>
+          <p className="text-xs text-slate-500 mt-1">أضف عميلاً جديداً للبدء</p>
+        </div>
+      ) : isMobile ? (
+        /* === MOBILE CARD LIST === */
+        <div className="space-y-2.5">
+          {customers.map((c) => (
+            <div key={c.id} className={`${cardBg} rounded-2xl p-3.5 shadow-sm`}>
+              {/* Top row: avatar + name + code */}
+              <div className="flex items-center gap-2.5 mb-2.5">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500/30 to-sky-500/20 border border-indigo-400/20 flex items-center justify-center shrink-0">
+                  <span className="text-sm font-black text-indigo-300">{c.full_name?.charAt(0) || 'ع'}</span>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className={`text-sm font-black truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>{c.full_name}</p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-mono text-sky-400">{c.customer_code}</span>
+                    {c.total_balance_due > 0 && (
+                      <span className="text-[10px] font-bold text-amber-400 bg-amber-500/10 px-1.5 py-0.2 rounded-full border border-amber-500/20">
+                        {c.total_balance_due.toLocaleString()} ج.م
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Info row */}
+              <div className="flex items-center gap-3 mb-2.5">
+                <div className="flex items-center gap-1 text-[11px] text-slate-400">
+                  <Phone className="w-3 h-3 text-slate-500" />
+                  <span className="font-mono" dir="ltr">{c.phone}</span>
+                </div>
+                <div className="flex items-center gap-1 text-[11px] text-slate-400">
+                  <Car className="w-3 h-3 text-sky-400" />
+                  <span className="font-bold">{c.vehicles_count || 0} سيارة</span>
+                </div>
+                <div className="flex items-center gap-1 text-[11px] text-slate-400">
+                  <Receipt className="w-3 h-3 text-emerald-400" />
+                  <span>{c.visit_count || 0} زيارة</span>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center gap-1.5 pt-2.5 border-t border-white/[0.06]">
+                <button
+                  onClick={() => handleOpenEdit(c)}
+                  className="flex-1 flex items-center justify-center gap-1 bg-amber-500/10 hover:bg-amber-500 text-amber-400 hover:text-slate-950 py-2 rounded-xl text-[11px] font-bold transition-all border border-amber-500/20 active:scale-95"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                  <span>تعديل</span>
+                </button>
+                <button
+                  onClick={() => handleOpenDetail(c.id)}
+                  className="flex-1 flex items-center justify-center gap-1 bg-sky-500/10 hover:bg-sky-500 text-sky-400 hover:text-white py-2 rounded-xl text-[11px] font-bold transition-all border border-sky-500/20 active:scale-95"
+                >
+                  <Eye className="w-3.5 h-3.5" />
+                  <span>الملف</span>
+                </button>
+                <button
+                  onClick={() => handleDeleteCustomer(c.id, c.full_name)}
+                  className="p-2 bg-slate-800/60 hover:bg-rose-500/20 hover:text-rose-400 text-slate-400 rounded-xl transition-colors border border-white/[0.06] active:scale-95"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        /* === DESKTOP TABLE === */
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-right text-xs sm:text-sm">
               <thead className="bg-slate-950/70 text-slate-400 border-b border-slate-800 text-xs">
@@ -305,7 +379,6 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ initialSearch, ini
                             ? 'bg-slate-800/90 text-slate-200 border-slate-700 hover:border-sky-500 hover:bg-sky-500/10 hover:text-sky-300 shadow-sm'
                             : 'bg-slate-900/60 text-slate-500 border-slate-800 hover:border-slate-700 hover:text-slate-400'
                         }`}
-                        title="مرر المؤشر لمعاينة السيارات، أو انقر لفتح الملف"
                       >
                         <Car className={`w-3.5 h-3.5 ${(c.vehicles_count || 0) > 0 ? 'text-sky-400' : 'text-slate-600'}`} />
                         <span>{c.vehicles_count || 0}</span>
@@ -326,21 +399,18 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ initialSearch, ini
                         <button
                           onClick={() => handleOpenEdit(c)}
                           className="p-1.5 bg-slate-800 hover:bg-amber-600/20 hover:text-amber-400 text-slate-300 rounded-lg transition-colors cursor-pointer"
-                          title="تعديل بيانات العميل"
                         >
                           <Pencil className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleOpenDetail(c.id)}
                           className="p-1.5 bg-slate-800 hover:bg-sky-600/20 hover:text-sky-400 text-slate-300 rounded-lg transition-colors cursor-pointer"
-                          title="عرض الملف الشامل"
                         >
                           <Eye className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleDeleteCustomer(c.id, c.full_name)}
                           className="p-1.5 bg-slate-800 hover:bg-rose-600/20 hover:text-rose-400 text-slate-400 rounded-lg transition-colors cursor-pointer"
-                          title="حذف العميل وسجلاته"
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
@@ -351,8 +421,8 @@ export const CustomersView: React.FC<CustomersViewProps> = ({ initialSearch, ini
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Add Customer Modal */}
       {showAddModal && (
